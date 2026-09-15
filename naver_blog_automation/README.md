@@ -80,6 +80,60 @@ python main.py --keyword "쏘렌토 풀체인지 MQ5" --blog-id 내블로그아�
 
 기본값(`--no-pause` 미지정)은 에디터에 내용을 다 채운 뒤, **임시저장을 누르기 전에 터미널에서 Enter 입력을 기다린다.** 브라우저 창에서 실제로 제목·본문·이미지가 잘 들어갔는지 눈으로 확인한 뒤 Enter를 눌러야 저장된다. 몇 번 돌려서 안정적으로 동작하는 걸 확인한 뒤에 `--auto --headless --no-pause`로 완전 무인 자동화하는 걸 권장한다.
 
+`main.py`의 실제 로직(제목→본문→이미지→임시저장)은 `src/post_runner.py`의 `run_single_post()`에 있다. 아래 하루 배치 기능도 이 함수를 그대로 재사용한다.
+
+## 하루 배치: 국내 자동차 뉴스 조사 + 8개 포스트 자동 생성
+
+매일 저녁 국내 자동차 업계(현대차·기아·제네시스·KG모빌리티·르노코리아·수입차 브랜드 등)의 화제 소식을 웹에서 조사해 리포트로 만들고, 그중 8개를 골라 각각 포스트로 만들어 임시저장까지 하는 배치 스크립트다.
+
+```bash
+python daily_batch.py --blog-id 내블로그아이디
+```
+
+동작 순서:
+
+1. `src/news_research.py`가 GPT + 웹 검색으로 오늘/최근 뉴스를 조사해 `reports/YYYY-MM-DD.json`(구조화 데이터)과 `reports/YYYY-MM-DD.md`(사람이 읽는 리포트: 발행일·핵심 내용·출처 링크)를 만든다. 조사한 항목 중 브랜드가 겹치지 않도록 8개를 골라 각 항목에 `keyword`(제목 후보)와 `reference`(발행일·핵심 내용·출처를 담은 요약)를 붙인다.
+2. 그 8개를 하나씩 `run_single_post(keyword=..., reference=...)`에 넣는다. `keyword`+`reference` 조합은 지침 원문의 "제목+본문 참고형" 입력과 같은 방식이다 — reference는 팩트 소스로만 쓰이고, 본문 자체는 지침의 F목록·팩트체크 절차를 그대로 다시 거친다.
+3. 배치는 **완전 무인**으로 돈다(제목 1번 자동 선택, 수정 요청 없음, 저장 전 확인 대기 없음) — 밤에 사람이 붙어있지 않기 때문이다. 결과는 전부 **임시저장**이며 실제 발행은 하지 않으니, 다음날 아침에 직접 검토 후 발행한다.
+4. 포스트 하나가 실패해도(선택자 불일치, 이미지 생성 실패 등) 나머지는 계속 진행하고, 마지막에 `output/YYYY-MM-DD/batch_summary.json`에 성공/실패 요약을 남긴다.
+
+주요 옵션:
+
+| 옵션 | 설명 |
+|---|---|
+| `--count` | 오늘 만들 포스트 개수 (기본 8개) |
+| `--reports-dir` | 뉴스 리포트 저장 폴더 (기본 `reports`) |
+| `--show-browser` | 브라우저 창을 띄워서 확인 (테스트용, 기본은 headless) |
+| `--no-infographic-via-chatgpt` | 인포그래픽도 이미지 생성 API로 만든다 |
+
+**사전 준비**: `python -m src.naver_login`과 `python -m src.chatgpt_login`으로 미리 로그인 세션을 저장해둬야 한다. 야간 무인 실행 중에는 로그인 화면이 떠도 아무도 로그인해줄 수 없으므로, 세션이 만료되면 그날 배치가 통째로 실패한다 — 정기적으로(예: 2주에 한 번) 두 로그인 스크립트를 다시 돌려서 세션을 갱신하는 걸 권장한다.
+
+### 매일 21:30에 자동 실행되게 예약하기
+
+`daily_batch.py`는 한 번 실행하면 그날 배치를 끝내고 종료하는 스크립트다. 상주시켜두는 게 아니라, OS 스케줄러가 매일 정해진 시각에 한 번씩 실행해주는 방식을 쓴다.
+
+**Linux/Mac (crontab)**
+
+```bash
+crontab -e
+```
+
+다음 줄을 추가한다(경로는 실제 설치 위치와 python 실행 파일 경로로 바꾼다):
+
+```
+30 21 * * * cd /home/user/aa/naver_blog_automation && /usr/bin/python3 daily_batch.py --blog-id 내블로그아이디 >> logs/daily.log 2>&1
+```
+
+(로그를 남기려면 `mkdir -p logs`로 폴더를 미리 만들어둔다.)
+
+**Windows (작업 스케줄러)**
+
+1. "작업 스케줄러" 실행 → "기본 작업 만들기"
+2. 트리거: 매일, 오후 9:30
+3. 동작: 프로그램 시작 → 프로그램/스크립트에 `python.exe` 경로, 인수에 `daily_batch.py --blog-id 내블로그아이디`, 시작 위치에 `naver_blog_automation` 폴더 경로 입력
+
+두 방식 모두 컴퓨터가 그 시각에 켜져 있어야 동작한다는 점, 그리고 위의 로그인 세션이 만료되지 않아야 한다는 점을 기억해야 한다.
+
 ## 선택자가 깨졌을 때
 
 네이버와 챗지피티 둘 다 UI(DOM 구조·클래스명)를 예고 없이 바꾼다. `src/naver_poster.py`(`TITLE_SELECTORS` / `IMAGE_BUTTON_SELECTORS` / `SAVE_BUTTON_SELECTORS`)와 `src/chatgpt_image.py`(`PROMPT_INPUT_SELECTORS` / `SEND_BUTTON_SELECTORS` / `NEW_CHAT_SELECTORS` / `GENERATED_IMAGE_SELECTORS`) 상단에 후보 선택자가 여러 개 들어 있지만, 전부 실패하면:
