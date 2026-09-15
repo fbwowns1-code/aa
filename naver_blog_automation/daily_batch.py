@@ -47,6 +47,9 @@ def main():
     parser = argparse.ArgumentParser(description="국내 자동차 뉴스 조사 + 하루 N개 포스트 배치")
     parser.add_argument("--blog-id", default=None, help="네이버 블로그 ID (blog.naver.com/아이디). --account를 쓰면 생략 가능")
     parser.add_argument("--account", default=None, help="accounts.json에 등록된 계정 이름 (여러 계정을 운영할 때)")
+    parser.add_argument("--prompt-path", default=None,
+                         help="글쓰기 지침 파일 경로를 직접 지정한다. 생략하면 계정에 등록된 "
+                              "지침 또는 .env의 기본 지침을 쓴다")
     parser.add_argument("--count", type=int, default=8, help="오늘 만들 포스트 개수 (기본 8개)")
     parser.add_argument("--out-dir", default="output", help="포스트별 이미지 저장 폴더의 상위 경로")
     parser.add_argument("--reports-dir", default="reports", help="뉴스 리포트 저장 폴더")
@@ -73,6 +76,7 @@ def main():
     assign_daily_batch(
         blog_id=args.blog_id,
         account=args.account,
+        prompt_path=args.prompt_path,
         count=args.count,
         out_dir=args.out_dir,
         reports_dir=args.reports_dir,

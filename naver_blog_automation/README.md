@@ -78,15 +78,16 @@ cp accounts.example.json accounts.json
 
 ```json
 {
-  "car_blog": {
+  "car_it_blog": {
     "blog_id": "myblogid1",
     "naver_id": "naver_login_id_1",
     "naver_pw": "naver_login_password_1"
   },
-  "it_blog": {
+  "cooking_blog": {
     "blog_id": "myblogid2",
     "naver_id": "naver_login_id_2",
-    "naver_pw": "naver_login_password_2"
+    "naver_pw": "naver_login_password_2",
+    "prompt_path": "prompts/cooking_blog.txt"
   }
 }
 ```
@@ -94,18 +95,30 @@ cp accounts.example.json accounts.json
 그리고 계정별로 출근 등록을 한다 — `naver_id`/`naver_pw`를 적어두면 로그인 페이지에 아이디·비밀번호를 자동으로 입력해준다(보안문자·2단계 인증은 직접 처리하고 로그인 버튼도 직접 눌러야 한다. 자동 제출은 하지 않는다):
 
 ```bash
-python -m departments.onboarding_publishing --account car_blog
-python -m departments.onboarding_publishing --account it_blog
+python -m departments.onboarding_publishing --account car_it_blog
+python -m departments.onboarding_publishing --account cooking_blog
 ```
 
 각 계정의 세션은 `naver_session_<계정이름>.json`으로 따로 저장된다. 이후 모든 명령에서 `--blog-id` 대신 `--account`를 쓰면 된다:
 
 ```bash
-python main.py --keyword "..." --account car_blog
-python daily_batch.py --account it_blog
+python main.py --keyword "..." --account car_it_blog
+python daily_batch.py --account cooking_blog
 ```
 
-`daily_batch.py`를 계정별로 따로 실행해도 서로 덮어쓰지 않는다 — 리포트는 `reports/<계정이름>/`, 진행 상태·이미지는 `output/<날짜>/<계정이름>/`에 나뉘어 저장된다. 챗지피티(디자인팀) 로그인은 보통 계정과 무관하게 공용 세션 하나(`chatgpt_session.json`)를 여러 네이버 계정이 같이 써도 되며, 꼭 따로 쓰고 싶다면 `accounts.json`의 해당 계정에 `"chatgpt_session_file": "chatgpt_session_car_blog.json"`처럼 직접 지정하면 된다.
+`daily_batch.py`를 계정별로 따로 실행해도 서로 덮어쓰지 않는다 — 리포트는 `reports/<계정이름>/`, 진행 상태·이미지는 `output/<날짜>/<계정이름>/`에 나뉘어 저장된다. 챗지피티(디자인팀) 로그인은 보통 계정과 무관하게 공용 세션 하나(`chatgpt_session.json`)를 여러 네이버 계정이 같이 써도 되며, 꼭 따로 쓰고 싶다면 `accounts.json`의 해당 계정에 `"chatgpt_session_file": "chatgpt_session_car_it_blog.json"`처럼 직접 지정하면 된다.
+
+### 계정마다 다른 글쓰기 지침 쓰기
+
+위 예시처럼 `accounts.json`의 계정에 `prompt_path`를 지정하면, 그 계정으로 글을 쓸 때 기획팀·작성팀·디자인팀이 `prompts/system_prompt.txt`(기본 IT/자동차 지침) 대신 그 파일을 쓴다. `prompt_path`를 안 주면 기본 지침을 그대로 쓴다.
+
+다른 주제의 블로그(요리, 여행, 재테크 등)를 새 계정으로 추가하려면:
+
+1. `prompts/system_prompt.txt`를 복사해서 새 파일(예: `prompts/cooking_blog.txt`)을 만든다.
+2. 턴1/턴2/턴3 구조, 맨 아래 "자동화 어댑터" 섹션(`---AUTOMATION-JSON---` 블록)은 그대로 두고, 그 위의 내용(말투·카테고리·금지어·제목 규칙 등)만 해당 주제에 맞게 다시 쓴다 — 자동화 어댑터 섹션을 지우거나 JSON 형식을 바꾸면 매니저가 결과를 파싱하지 못한다.
+3. `accounts.json`의 해당 계정에 `"prompt_path": "prompts/cooking_blog.txt"`를 적어준다.
+
+`--prompt-path`를 명령줄에서 직접 주면(`main.py`/`daily_batch.py`) 계정에 등록된 지침보다 그게 우선한다 — 테스트용으로 임시 지침을 써볼 때 유용하다.
 
 **보안 참고**: `naver_id`/`naver_pw`는 로그인 페이지에 자동으로 타이핑해주는 용도로만 쓰이고 이 코드가 다른 곳으로 전송하지 않는다. 그래도 평문으로 저장되는 파일이니 `accounts.json`을 외부에 공유하거나 git에 올리지 않도록 주의한다.
 
@@ -131,6 +144,7 @@ python main.py --keyword "쏘렌토 풀체인지 MQ5" --blog-id 내블로그아�
 | `--title-index` | 제목 번호를 미리 고정해서 대화형 프롬프트 자체를 생략한다 |
 | `--blog-id` | `blog.naver.com/이 부분`. 여러 계정을 운영한다면 이 대신 `--account` |
 | `--account` | `accounts.json`에 등록된 계정 이름 (여러 계정 운영 시) |
+| `--prompt-path` | 글쓰기 지침 파일을 직접 지정(생략 시 계정의 지침 또는 기본 지침) |
 | `--headless` | 브라우저 창 없이 실행 (처음에는 끄고 눈으로 확인하는 것을 권장) |
 | `--no-pause` | 임시저장 직전 확인 절차 생략 (처음 실행할 때는 권장하지 않음) |
 | `--auto` | 부서마다 묻지 않고 기본값(제목 1번, 수정 없음)으로 끝까지 자동 진행 |

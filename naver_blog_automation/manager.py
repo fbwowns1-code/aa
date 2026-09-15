@@ -19,8 +19,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
+from config import PROMPT_PATH as DEFAULT_PROMPT_PATH
 from core.pipeline import BlogPipeline
-from core.accounts import get_account, naver_session_file_for, chatgpt_session_file_for
+from core.accounts import get_account, naver_session_file_for, chatgpt_session_file_for, prompt_path_for
 from departments import research, planning, writing, design, publishing
 
 # 배치 중 이 문구가 오류 메시지에 들어 있으면 "재시도해도 소용없는" 치명적
@@ -75,7 +76,7 @@ def assign_single_post(
     pause_before_save: bool = True,
     auto: bool = False,
     infographic_via_chatgpt: bool = True,
-    prompt_path: str = "prompts/system_prompt.txt",
+    prompt_path: Optional[str] = None,
 ) -> dict:
     """글 한 편을 기획→작성→디자인→발행 순서로 만들어 네이버에 임시저장한다.
 
@@ -83,6 +84,11 @@ def assign_single_post(
     blog_id와 로그인 세션 파일을 그 계정 것으로 자동으로 고른다(blog_id를
     같이 주면 account의 blog_id보다 그 값이 우선한다). 계정이 하나뿐이면
     account 없이 blog_id만 줘도 기존처럼 동작한다.
+
+    prompt_path를 따로 주지 않으면, account에 prompt_path가 등록돼 있으면
+    그 지침을, 없으면 .env의 기본 지침(PROMPT_PATH)을 쓴다 — 계정(블로그)
+    마다 전혀 다른 글쓰기 지침을 쓸 수 있다는 뜻이다(자동차 블로그 계정은
+    자동차 지침, 요리 블로그 계정은 요리 지침처럼).
 
     반환값: {"keyword", "title", "char_count", "image_count"}
     """
@@ -93,10 +99,12 @@ def assign_single_post(
                           "--account로 blog_id가 등록된 계정을 지정하세요.")
     naver_session_file = naver_session_file_for(account, account_info)
     chatgpt_session_file = chatgpt_session_file_for(account, account_info)
+    resolved_prompt_path = prompt_path or prompt_path_for(account_info) or DEFAULT_PROMPT_PATH
 
     who = f"'{account}' 계정" if account else f"블로그 {blog_id}"
-    print(f"\n[매니저] {who}로 '{keyword}' 건을 접수해서 기획팀에 넘깁니다.")
-    pipeline = BlogPipeline(load_system_prompt(prompt_path))
+    print(f"\n[매니저] {who}로 '{keyword}' 건을 접수해서 기획팀에 넘깁니다. "
+          f"(지침: {resolved_prompt_path})")
+    pipeline = BlogPipeline(load_system_prompt(resolved_prompt_path))
 
     turn1 = planning.propose_titles(pipeline, keyword, reference, extra)
     chosen_no = planning.select_title(pipeline, turn1, auto, title_index)
@@ -175,7 +183,7 @@ def assign_daily_batch(
     reports_dir: str = "reports",
     headless: bool = True,
     infographic_via_chatgpt: bool = True,
-    prompt_path: str = "prompts/system_prompt.txt",
+    prompt_path: Optional[str] = None,
     max_retries: int = 1,
     retry_wait_seconds: int = 60,
     consecutive_failure_limit: int = 2,
@@ -185,8 +193,9 @@ def assign_daily_batch(
     부서에 넘겨 완전 무인으로 처리한다.
 
     여러 계정을 운영한다면 account에 accounts.json의 계정 이름을 주면
-    blog_id·로그인 세션을 그 계정 것으로 자동으로 고르고, 리포트·진행
-    상태도 계정별 폴더(reports/<account>/, output/<날짜>/<account>/)에
+    blog_id·로그인 세션·글쓰기 지침(prompt_path)을 그 계정 것으로 자동으로
+    고르고, 리포트·진행 상태도 계정별 폴더(reports/<account>/,
+    output/<날짜>/<account>/)에
     따로 저장한다 — 같은 날 여러 계정을 각각 배치 돌려도 서로 덮어쓰지
     않는다. 계정이 하나뿐이면 account 없이 blog_id만 줘도 된다.
 

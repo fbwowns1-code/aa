@@ -10,17 +10,24 @@ accounts.json이 없거나 --account를 안 주면 기존처럼 --blog-id를 직
 단일 기본 세션 파일(.env의 NAVER_SESSION_FILE)을 쓰는 방식이 그대로
 동작한다 — 계정이 하나뿐이면 accounts.json을 만들 필요가 없다.
 
-accounts.json 예시:
+계정마다 다른 글쓰기 지침(prompt_path)도 줄 수 있다 — prompt_path를 안
+주면 .env의 기본 지침(PROMPT_PATH, 보통 prompts/system_prompt.txt, 지금은
+IT/자동차 지침)을 쓰고, 다른 주제의 블로그 계정에는 그 계정만의 지침
+파일을 따로 지정할 수 있다.
+
+accounts.json 예시 (car_it_blog는 기본 지침을 그대로 쓰고, cooking_blog는
+별도로 작성한 요리 블로그 지침을 쓰는 경우):
 {
-  "car_blog": {
+  "car_it_blog": {
     "blog_id": "myblogid1",
     "naver_id": "naver_login_id_1",
     "naver_pw": "naver_login_password_1"
   },
-  "it_blog": {
+  "cooking_blog": {
     "blog_id": "myblogid2",
     "naver_id": "naver_login_id_2",
-    "naver_pw": "naver_login_password_2"
+    "naver_pw": "naver_login_password_2",
+    "prompt_path": "prompts/cooking_blog.txt"
   }
 }
 
@@ -76,3 +83,12 @@ def chatgpt_session_file_for(name: Optional[str], account: Optional[dict] = None
         return account["chatgpt_session_file"]
     from config import CHATGPT_SESSION_FILE
     return CHATGPT_SESSION_FILE
+
+
+def prompt_path_for(account: Optional[dict] = None) -> Optional[str]:
+    """계정에 등록된 지침(프롬프트) 파일 경로를 돌려준다. 계정에
+    prompt_path가 없거나 계정 자체가 없으면 None을 돌려주고, 호출 쪽에서
+    기본 지침(.env의 PROMPT_PATH)으로 대체한다."""
+    if account and account.get("prompt_path"):
+        return account["prompt_path"]
+    return None

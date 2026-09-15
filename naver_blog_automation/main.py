@@ -13,8 +13,10 @@
 묻지 않고 기본값(1번 제목, 수정 없음)으로 끝까지 자동 진행한다.
 
 여러 네이버 계정(여러 블로그)을 운영한다면 --blog-id 대신 --account로
-accounts.json에 등록된 계정 이름을 주면 blog_id와 로그인 세션을 그 계정
-것으로 자동으로 고른다(README의 "여러 계정 운영하기" 참고).
+accounts.json에 등록된 계정 이름을 주면 blog_id·로그인 세션·글쓰기 지침
+(prompt_path)을 그 계정 것으로 자동으로 고른다 — 계정마다 전혀 다른
+블로그 지침(자동차/요리/IT 등)을 쓸 수 있다는 뜻이다(README의 "여러 계정
+운영하기" 참고). --prompt-path를 직접 주면 계정 설정보다 그게 우선한다.
 
 사용 전 준비:
   1) pip install -r requirements.txt && playwright install chromium
@@ -41,6 +43,9 @@ def main():
                          help="선택할 제목 번호를 미리 고정한다(대화형 프롬프트 생략, --auto와 함께 쓸 때 유용)")
     parser.add_argument("--blog-id", default=None, help="네이버 블로그 ID (blog.naver.com/아이디). --account를 쓰면 생략 가능")
     parser.add_argument("--account", default=None, help="accounts.json에 등록된 계정 이름 (여러 계정을 운영할 때)")
+    parser.add_argument("--prompt-path", default=None,
+                         help="글쓰기 지침 파일 경로를 직접 지정한다. 생략하면 계정에 등록된 "
+                              "지침 또는 .env의 기본 지침을 쓴다")
     parser.add_argument("--out-dir", default="output", help="생성된 이미지 저장 폴더")
     parser.add_argument("--headless", action="store_true", help="브라우저 창을 띄우지 않고 실행")
     parser.add_argument("--no-pause", action="store_true",
@@ -70,6 +75,7 @@ def main():
         pause_before_save=not args.no_pause,
         auto=args.auto,
         infographic_via_chatgpt=args.infographic_via_chatgpt,
+        prompt_path=args.prompt_path,
     )
 
     print(f"\n[매니저] 대표님께 보고: '{result['title']}' 임시저장 완료 "
