@@ -7,6 +7,12 @@
   3) 이미지 프롬프트 생성 (턴3) → OpenAI 이미지 생성 API로 실제 이미지 파일 제작
   4) Playwright로 네이버 블로그 글쓰기 에디터에 제목/본문/이미지를 채우고 임시저장
 
+기본 모드는 대화형이다 — 지침 원문에 있는 "제목 번호를 골라달라"와
+"수정할 곳이 있으면 말해달라" 지점에서 실제로 멈춰서 입력을 기다리고,
+번호/Enter 대신 자유 텍스트를 입력하면 그걸 수정 요청으로 모델에 보낸다.
+--auto를 주면 각 단계에서 묻지 않고 기본값(1번 제목, 수정 없음)으로
+끝까지 자동 진행한다.
+
 사용 전 준비:
   1) pip install -r requirements.txt && playwright install chromium
   2) .env.example을 .env로 복사하고 OPENAI_API_KEY 입력
@@ -54,42 +60,102 @@ def build_image_prompts(turn3: dict, image_mode: str) -> list:
     return prompts
 
 
+def choose_title(pipeline: BlogPipeline, turn1: dict, auto: bool) -> int:
+    titles = turn1["titles"]
+    if auto:
+        return titles[0]["no"]
+
+    while True:
+        print("\n" + pipeline.human_part())
+        answer = input(
+            "\n>> 마음에 드는 제목 번호를 입력하세요.\n"
+            "   수정 요청이 있으면 문장으로 입력하세요 (예: '오너 감정형 위주로 5개만 다시', "
+            "'가격 정보를 제목에 넣어줘'): "
+        ).strip()
+        if not answer:
+            continue
+        if answer.isdigit():
+            title_no = int(answer)
+            if any(t["no"] == title_no for t in titles):
+                return title_no
+            print(f"[안내] {title_no}번은 목록에 없습니다. 다시 입력해주세요.")
+            continue
+        # 숫자가 아니면 수정 요청으로 간주해서 그대로 모델에 전달한다.
+        turn1 = pipeline.revise(answer)
+        titles = turn1["titles"]
+
+
+def finalize_body(pipeline: BlogPipeline, turn2: dict, auto: bool) -> dict:
+    if auto:
+        return turn2
+
+    while True:
+        print("\n" + pipeline.human_part())
+        answer = input(
+            "\n>> 본문에 수정할 내용이 있으면 문장으로 입력하세요 (예: '3번째 소제목에 연비 얘기 추가해줘', "
+            "'말투를 좀 더 담백하게'). 없으면 그냥 Enter: "
+        ).strip()
+        if not answer:
+            return turn2
+        turn2 = pipeline.revise(answer)
+
+
+def finalize_images(pipeline: BlogPipeline, turn3: dict, auto: bool) -> dict:
+    if auto:
+        return turn3
+
+    while True:
+        print("\n" + pipeline.human_part())
+        answer = input(
+            "\n>> 이미지 프롬프트에 수정할 내용이 있으면 문장으로 입력하세요 (예: '메인 이미지 배경을 도심으로'). "
+            "없으면 그냥 Enter: "
+        ).strip()
+        if not answer:
+            return turn3
+        turn3 = pipeline.revise(answer)
+
+
 def main():
     parser = argparse.ArgumentParser(description="네이버 블로그 포스팅 자동화")
     parser.add_argument("--keyword", required=True, help="키워드 또는 제목")
     parser.add_argument("--reference", default="", help="참고 본문(선택)")
+    parser.add_argument("--extra", default="", help="처음부터 반영하고 싶은 추가 요청사항(선택)")
     parser.add_argument("--image-mode", default="둘다", choices=["실사", "인포", "둘다"])
     parser.add_argument("--title-index", type=int, default=None,
-                         help="선택할 제목 번호(미지정 시 SEO 최적화형 1번을 자동 선택)")
+                         help="선택할 제목 번호를 미리 고정한다(대화형 프롬프트 생략, --auto와 함께 쓸 때 유용)")
     parser.add_argument("--blog-id", required=True, help="네이버 블로그 ID (blog.naver.com/아이디)")
     parser.add_argument("--out-dir", default="output", help="생성된 이미지 저장 폴더")
     parser.add_argument("--headless", action="store_true", help="브라우저 창을 띄우지 않고 실행")
     parser.add_argument("--no-pause", action="store_true",
                          help="임시저장 전 확인 절차를 건너뛴다 (처음 실행할 때는 권장하지 않음)")
+    parser.add_argument("--auto", action="store_true",
+                         help="턴마다 멈추지 않고 기본값으로 끝까지 자동 진행 (제목 1번 자동 선택, 수정 없음)")
     args = parser.parse_args()
 
     system_prompt = load_system_prompt()
     pipeline = BlogPipeline(system_prompt)
 
     print("[1/4] 정보 수집 및 제목 생성 중...")
-    turn1 = pipeline.run_turn1(args.keyword, args.reference, args.image_mode)
-    titles = turn1["titles"]
-    if not titles:
-        raise RuntimeError("제목이 하나도 생성되지 않았습니다. 턴1 원본 응답을 확인하세요:\n" + pipeline.turn1_raw)
+    turn1 = pipeline.run_turn1(args.keyword, args.reference, args.image_mode, args.extra)
+    if not turn1.get("titles"):
+        raise RuntimeError("제목이 하나도 생성되지 않았습니다. 원본 응답을 확인하세요:\n" + pipeline.current_raw)
 
-    title_no = args.title_index or titles[0]["no"]
-    chosen = next((t for t in titles if t["no"] == title_no), None)
-    if chosen is None:
-        raise RuntimeError(f"제목 번호 {title_no}를 목록에서 찾지 못했습니다.")
+    if args.title_index:
+        title_no = args.title_index
+    else:
+        title_no = choose_title(pipeline, turn1, args.auto)
+    chosen = next(t for t in turn1["titles"] if t["no"] == title_no)
     print(f"  선택된 제목({title_no}번): {chosen['text']}")
 
     print("[2/4] 본문 작성 및 팩트체크 중...")
     turn2 = pipeline.run_turn2(title_no)
-    print(f"  {turn2.get('factcheck_summary', '')}")
+    turn2 = finalize_body(pipeline, turn2, args.auto)
+    print(f"\n  {turn2.get('factcheck_summary', '')}")
     print(f"  글자수(공백 제외): {turn2.get('char_count', '?')}")
 
-    print("[3/4] 이미지 프롬프트 생성 및 이미지 제작 중...")
+    print("\n[3/4] 이미지 프롬프트 생성 및 이미지 제작 중...")
     turn3 = pipeline.run_turn3()
+    turn3 = finalize_images(pipeline, turn3, args.auto)
     image_prompts = build_image_prompts(turn3, args.image_mode)
     generated = generate_images(image_prompts, args.out_dir)
 
@@ -97,7 +163,7 @@ def main():
     for img in generated:
         section_images.setdefault(img["subheading"], img["file_path"])
 
-    print("[4/4] 네이버 블로그에 임시저장 중...")
+    print("\n[4/4] 네이버 블로그에 임시저장 중...")
     post_draft(
         blog_id=args.blog_id,
         title=turn2["title"],

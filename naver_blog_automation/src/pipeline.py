@@ -22,28 +22,46 @@ def _extract_automation_json(text: str) -> dict:
 
 class BlogPipeline:
     """지침의 3턴(제목 → 본문/팩트체크 → 이미지 프롬프트) 흐름을
-    OpenAI Responses API 대화 하나로 자동 실행한다."""
+    OpenAI Responses API 대화 하나로 실행한다.
+
+    각 턴 사이에 사용자가 자유 텍스트로 수정 요청을 넣을 수 있도록
+    revise()를 제공한다 — 지침 원문의 "제목 번호를 골라달라" /
+    "수정할 곳이 있으면 말해달라" 지점을 그대로 살린 것이다.
+    """
 
     def __init__(self, system_prompt: str):
         self.client = ConversationClient(system_prompt)
-        self.turn1_raw = None
-        self.turn2_raw = None
-        self.turn3_raw = None
+        self.current_raw = None  # 가장 최근 모델 응답 원문(사람이 읽는 부분 + JSON)
 
-    def run_turn1(self, keyword: str, reference_text: str = "", image_mode: str = "둘다") -> dict:
+    def _send(self, message: str, use_web_search: bool = True) -> dict:
+        self.current_raw = self.client.send(message, use_web_search=use_web_search)
+        return _extract_automation_json(self.current_raw)
+
+    def run_turn1(self, keyword: str, reference_text: str = "", image_mode: str = "둘다",
+                  extra_request: str = "") -> dict:
         user_message = (
             f"키워드 또는 제목: {keyword}\n"
             f"참고 본문: {reference_text or '(없음)'}\n"
             f"이미지 모드: {image_mode}\n"
             f"레퍼런스 썸네일: (없음)"
         )
-        self.turn1_raw = self.client.send(user_message)
-        return _extract_automation_json(self.turn1_raw)
+        if extra_request:
+            user_message += f"\n\n위 입력에 추가로 반영해줄 요청사항: {extra_request}"
+        return self._send(user_message)
 
-    def run_turn2(self, title_no: int) -> dict:
-        self.turn2_raw = self.client.send(str(title_no))
-        return _extract_automation_json(self.turn2_raw)
+    def run_turn2(self, title_no) -> dict:
+        return self._send(str(title_no))
 
     def run_turn3(self) -> dict:
-        self.turn3_raw = self.client.send("이미지")
-        return _extract_automation_json(self.turn3_raw)
+        return self._send("이미지")
+
+    def revise(self, message: str) -> dict:
+        """현재 턴(제목 목록/본문/이미지 프롬프트 중 방금 받은 것)에 대해
+        자유 텍스트로 수정을 요청하고, 같은 형식의 자동화 JSON을 다시 받는다."""
+        return self._send(message)
+
+    def human_part(self) -> str:
+        """가장 최근 응답에서 사람이 읽는 부분만 돌려준다(자동화 JSON 블록 제외)."""
+        if not self.current_raw:
+            return ""
+        return self.current_raw.split(AUTOMATION_MARKER, 1)[0].strip()
