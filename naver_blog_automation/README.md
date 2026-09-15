@@ -31,9 +31,9 @@
 
 본문에 넣을 이미지는 **웹에서 이미지를 가져와 가공("이미지 세탁")하는 방식은 구현하지 않았다.** 타인의 저작물을 역검색·저작권 탐지를 피해 재사용하는 것은 저작권 침해 회피 수단이기 때문이다.
 
-디자인팀은 실사 이미지는 다루지 않고 **한글 인포그래픽 썸네일만** 만든다. 기본값은 **챗지피티 웹채팅(chatgpt.com) 자동화**다(`core/chatgpt_image.py`) — 인포그래픽 프롬프트를 실제로 챗지피티 채팅창에 붙여넣고, 생성된 이미지를 다운로드해서 저장한다. `--no-infographic-via-chatgpt`를 주면 대신 **OpenAI 이미지 생성 API(`gpt-image-1`)**로 만든다(`core/image_gen.py`).
+디자인팀은 실사 이미지는 다루지 않고 **한글 인포그래픽 썸네일만** 만든다. 기본값은 **OpenAI 이미지 생성 API(`gpt-image-1`)**다(`core/image_gen.py`). `--infographic-via-chatgpt`를 주거나 계정 설정(`configs/accounts/<계정>.yaml`의 `images.provider: chatgpt_web`)으로 명시하면 대신 **챗지피티 웹채팅(chatgpt.com) 자동화**(레거시, `core/legacy/chatgpt_image.py`)로 만든다 — 인포그래픽 프롬프트를 실제로 챗지피티 채팅창에 붙여넣고, 생성된 이미지를 다운로드해서 저장하는 방식이다.
 
-**챗지피티 웹채팅 자동화에 대한 주의**: OpenAI 이용약관은 챗지피티의 사람용 웹 제품에 대한 프로그램적/자동화 접근을 금지하고 있다. 이 방식은 API가 아니라 브라우저로 채팅 화면을 흉내 내는 것이므로, 계정이 제재될 수 있는 위험을 감안하고 쓰는 기능이다. 이 위험을 피하려면 실행할 때 `--no-infographic-via-chatgpt`를 붙인다.
+**챗지피티 웹채팅 자동화에 대한 주의**: OpenAI 이용약관은 챗지피티의 사람용 웹 제품에 대한 프로그램적/자동화 접근을 금지하고 있다. 이 방식은 API가 아니라 브라우저로 채팅 화면을 흉내 내는 것이므로, 계정이 제재될 수 있는 위험을 감안하고 쓰는 기능이다. 기본값(OpenAI 이미지 생성 API)을 쓰면 이 위험이 아예 없다 — `--infographic-via-chatgpt`를 명시적으로 켰을 때만 해당하는 주의사항이다.
 
 유명인의 실제 얼굴을 그대로 그리는 프롬프트는 (API든 챗지피티든) 정책상 거부될 수 있다. 실패한 이미지는 건너뛰고 나머지는 계속 진행하도록 되어 있으니, 필요하면 지침의 유명인 관련 장치(1·20번) 사용을 줄이는 것을 권장한다.
 
@@ -56,9 +56,9 @@ cp .env.example .env
 python -m departments.onboarding_publishing
 ```
 
-브라우저가 뜨면 직접 로그인 → 터미널로 돌아와 Enter → `naver_session.json` 저장 완료. 네이버 세션은 일정 기간 후 만료되므로, 자동화가 로그인 페이지에서 멈추면 이 스크립트를 다시 실행한다.
+브라우저가 뜨면 직접 로그인 → 터미널로 돌아와 Enter → `secrets/naver_session.json`(계정별로는 `secrets/naver_session_<계정이름>.json`) 저장 완료. 네이버 세션은 일정 기간 후 만료되므로, 자동화가 로그인 페이지에서 멈추면 이 스크립트를 다시 실행한다.
 
-**디자인팀** — 인포그래픽을 챗지피티 웹채팅으로 만들 경우(기본값)에 필요. `--no-infographic-via-chatgpt`를 쓴다면 생략 가능.
+**디자인팀** — 인포그래픽을 챗지피티 웹채팅(레거시)으로 만들 경우에만 필요. 기본값(OpenAI 이미지 생성 API)을 쓴다면 생략 가능.
 
 ```bash
 python -m departments.onboarding_design
@@ -134,12 +134,12 @@ python webapp/app.py
 
 화면은 위에서부터 이렇게 구성된다:
 
-- **부서별 진행 현황 패널** (맨 위, 항상 보임): 리서치팀·기획팀·작성팀·디자인팀·발행팀 다섯 칸이 각각 "대기/진행중/완료/실패" 상태와 방금 한 일(몇 번 제목을 골랐는지, 글자수, 이미지 몇 장인지 등)을 보여준다. 2초마다 자동 갱신된다. 하루 배치 중에는 "진행: 3 / 8건"처럼 몇 번째 글을 쓰고 있는지도 같이 보인다.
+- **오늘 진행 현황 패널** (맨 위, 항상 보임): 오늘 전체/완료/진행중/실패/검토 필요 건수, 스케줄러 정상/OFFLINE 배지, 계정별로 묶인 게시물 목록과 게시물마다 9단계(리서치~네이버저장) 상태가 표로 보인다. `automation.db`를 2초마다 다시 읽어서 자동 갱신되고, 실패/검토 필요 단계에는 "이 단계부터 재시도" 버튼이 있다(터미널을 쓰지 않고도 그 자리에서 재시도할 수 있다 — `NAVER_DRAFT` 재시도는 중복 저장 확인 팝업이 뜬다).
 - **1. 계정** 섹션: 등록된 계정을 고르는 드롭다운. "계정 추가/수정"을 펼치면 계정 이름·블로그 ID·네이버 로그인 아이디·비밀번호를 입력해 저장할 수 있다(`accounts.json`에 반영됨). 비밀번호는 화면에 다시 보여주지 않는다. **저장만으로 로그인이 되는 건 아니다** — 저장 후 터미널에서 `python -m departments.onboarding_publishing --account 계정이름`을 한 번 실행해서 실제 로그인 세션을 만들어야 한다(보안문자·2단계 인증은 그때 직접 처리).
 - **2. 지침** 섹션: 저장된 지침 파일을 드롭다운에서 골라 현재 선택된 계정에 연결하는 버튼이 있고, "지침 새로 쓰기/수정하기"를 펼치면 파일 이름과 내용을 직접 입력해서 새 지침 파일을 만들거나 기존 파일을 고쳐 저장할 수 있다. 드롭다운에서 파일을 고르면 내용이 자동으로 불러와진다.
 - **3. 실행** 섹션: 키워드(+참고 본문)를 입력해 **단발 실행**하거나, 개수를 정해 **하루 배치 실행**(뉴스 조사부터)을 누른다. 둘 다 현재 선택된 계정으로 실행된다.
 
-**중요한 제약**: 이 화면에서 누른 실행은 항상 **완전 자동 모드**로 돈다 — 기획팀이 "3. 실행" 섹션에서 고른 제목 채택 방식대로 자동으로 제목을 채택하고, 중간에 "이 부분 고쳐줘" 같은 대화형 수정은 할 수 없다(웹 버튼은 터미널 입력을 받을 방법이 없기 때문이다). 턴마다 결과를 보면서 대화로 고치고 싶으면 터미널에서 `python main.py`를 직접 실행한다(위 "지시 방법 1" 참고) — 그 경우에도 부서별 진행 현황 패널은 같은 `output/status.json`을 보므로, 터미널로 돌리는 동안 웹 화면을 열어서 진행 상황만 구경할 수도 있다.
+**중요한 제약**: 이 화면에서 누른 실행은 항상 **완전 자동 모드**로 돈다 — 기획팀이 "3. 실행" 섹션에서 고른 제목 채택 방식대로 자동으로 제목을 채택하고, 중간에 "이 부분 고쳐줘" 같은 대화형 수정은 할 수 없다(웹 버튼은 터미널 입력을 받을 방법이 없기 때문이다). 턴마다 결과를 보면서 대화로 고치고 싶으면 터미널에서 `python main.py`를 직접 실행한다(위 "지시 방법 1" 참고) — 그 경우에도 진행 현황 패널은 같은 `automation.db`를 보므로, 터미널로 돌리는 동안 웹 화면을 열어서 진행 상황만 구경할 수도 있다. `scheduler.py`로 야간 배치를 돌리는 동안에도 마찬가지다(스케줄러 하트비트도 같이 보인다).
 
 **보안 참고**: 이 대시보드는 로그인 화면이 따로 없고(`127.0.0.1`에서만 접속 가능하도록 기본 설정돼 있다), 네이버 비밀번호를 실제로 로그인 폼에 입력하는 기능이 있다. 같은 네트워크의 다른 사람이 접근하지 못하게 `host`를 바꾸거나 포트를 외부에 노출하지 말 것 — `webapp/app.py` 맨 아래 `app.run(host="127.0.0.1", ...)`을 그대로 두는 것을 권장한다.
 
@@ -189,7 +189,7 @@ python daily_batch.py --blog-id 내블로그아이디
 1. **리서치팀**(`departments/research.py`)이 GPT + 웹 검색으로 오늘/최근 뉴스를 조사해 `reports/YYYY-MM-DD.json`(구조화 데이터)과 `reports/YYYY-MM-DD.md`(발행일·핵심 내용·출처 링크가 정리된 리포트)를 만든다. 브랜드가 겹치지 않도록 8개를 골라 각 항목에 `keyword`(제목 후보)와 `reference`(요약+출처)를 붙인다.
 2. 그 8개를 하나씩 매니저가 `assign_single_post(keyword=..., reference=...)`로 나머지 부서(기획→작성→디자인→발행)에 넘긴다. `keyword`+`reference` 조합은 지침 원문의 "제목+본문 참고형" 입력과 같은 방식이다 — reference는 팩트 소스로만 쓰이고, 본문 자체는 작성팀이 F목록·팩트체크를 그대로 다시 거친다.
 3. 배치는 **완전 무인**으로 돈다(기획팀 1번 제목 자동 채택, 재작업 지시 없음, 저장 전 확인 대기 없음) — 밤에 사람이 붙어있지 않기 때문이다. 결과는 전부 **임시저장**이며 실제 발행은 하지 않으니, 다음날 아침에 직접 검토 후 발행한다.
-4. 진행 상황은 매 건마다 `output/YYYY-MM-DD/batch_state.json`에 저장한다. 자세한 실패 처리·대기 동작은 아래 "실패하면 멈추고 대기하기" 참고.
+4. 진행 상황은 게시물 1건마다 9단계(리서치~네이버저장) 단위로 `automation.db`(SQLite)에 즉시 기록된다. 자세한 실패 처리·재개 동작은 아래 "실패하면 멈추고 대기하기" 참고, 실시간으로 보려면 웹 대시보드(`python webapp/app.py`)를 연다.
 
 주요 옵션:
 
@@ -199,27 +199,23 @@ python daily_batch.py --blog-id 내블로그아이디
 | `--count` | 오늘 만들 포스트 개수 (기본 8개) |
 | `--reports-dir` | 뉴스 리포트 저장 폴더 (기본 `reports`) |
 | `--show-browser` | 브라우저 창을 띄워서 확인 (테스트용, 기본은 headless) |
-| `--no-infographic-via-chatgpt` | 디자인팀이 인포그래픽을 이미지 생성 API로 만든다 |
-| `--max-retries` | 한 건이 실패했을 때 재시도할 횟수 (기본 1회) |
-| `--retry-wait-seconds` | 재시도 전 대기 시간(초) (기본 60초) |
-| `--consecutive-failure-limit` | 이 횟수만큼 연속 실패하면 배치를 멈추고 대기 (기본 2) |
+| `--infographic-via-chatgpt` | 디자인팀이 인포그래픽을 챗지피티 웹채팅(레거시)으로 만든다(기본은 이미지 생성 API) |
 | `--force-rerun` | 중단된 배치를 무시하고 오늘 분량을 새 리서치부터 처음부터 다시 돈다 |
+| `--force-step` | 이어서 진행되는 첫 건에 한해 이미 성공한 단계도 강제로 다시 실행(예: `IMAGE`, `NAVER_DRAFT`) |
+| `--max-retries` / `--retry-wait-seconds` / `--consecutive-failure-limit` | **더 이상 쓰이지 않음** — 아래 "실패하면 멈추고 대기하기"의 오류 유형별 자동 재시도로 대체됐다. 옛 명령을 그대로 써도 오류는 안 나지만 값은 무시된다 |
 
-**사전 준비**: 위의 "부서별 출근 등록"(발행팀·디자인팀)을 미리 마쳐둬야 한다. 야간 무인 실행 중에는 로그인 화면이 떠도 아무도 로그인해줄 수 없으므로, 세션이 만료되면 그날 배치가 멈춘다(아래 참고) — 정기적으로(예: 2주에 한 번) 두 온보딩 스크립트를 다시 돌려서 세션을 갱신하는 걸 권장한다.
+**사전 준비**: 위의 "부서별 출근 등록"(발행팀, 그리고 챗지피티 레거시 이미지 경로를 쓴다면 디자인팀도)을 미리 마쳐둬야 한다. 야간 무인 실행 중에는 로그인 화면이 떠도 아무도 로그인해줄 수 없으므로, 세션이 만료되면 그날 배치가 멈춘다(아래 참고) — 정기적으로(예: 2주에 한 번) 온보딩 스크립트를 다시 돌려서 세션을 갱신하는 걸 권장한다.
 
 ### 실패하면 멈추고 대기하기
 
-야간 무인 실행 중 예상치 못한 변수(네트워크 순단, API 일시 오류, 로그인 세션 만료, 네이버·챗지피티 UI 구조 변경 등)로 한 건이 실패할 수 있다. 매니저(`manager.assign_daily_batch`)는 이렇게 처리한다.
+야간 무인 실행 중 예상치 못한 변수(네트워크 순단, API 일시 오류, 로그인 세션 만료, 네이버 UI 구조 변경 등)로 한 건이 실패할 수 있다. `core/job_manager.py`는 이렇게 처리한다.
 
-1. **재시도**: 한 건이 실패하면 `--retry-wait-seconds`(기본 60초)만큼 기다렸다가 `--max-retries`(기본 1회)만큼 다시 시도한다 — 일시적인 변수라면 이 단계에서 회복된다.
-2. **멈추고 대기**: 그래도 실패했는데,
-   - 오류 메시지에 로그인 세션 만료·온보딩 필요·선택자 불일치·API 키 오류 같은 "재시도해도 똑같이 막힐" 단서가 보이면(치명적 오류로 판단), 또는
-   - `--consecutive-failure-limit`(기본 2)번 연속으로 실패하면
+1. **단계별 자동 재시도**: 오류를 유형별로 분류해서(`core/retry_policy.py`) 네트워크 오류·API 일시 장애처럼 재시도하면 회복될 오류는 그 단계(리서치/기획/작성/이미지/네이버저장 등)만 지수 백오프(1차 5초 → 2차 15초 → 3차 45초, 계정 설정의 `retry.max_attempts`로 조절 가능)로 자동 재시도한다. 로그인 세션 만료·API 키 오류처럼 "재시도해도 똑같이 막힐" 오류는 재시도하지 않고 바로 다음 단계로 넘어간다.
+2. **한 건 실패는 배치를 막지 않는다**: 위 재시도까지 다 써도 특정 게시물 1건이 실패하면, 그 게시물만 `FAILED`로 남기고 **나머지 게시물은 계속 진행**한다(예: "전체 8건 / 완료 6건 / 실패 1건 / 검토 필요 1건").
+3. **배치 전체를 멈추는 경우**: 로그인 세션 만료·네이버 UI 구조 변경처럼 "다음 게시물에서도 똑같이 막힐" 시스템적 오류는 바로 그 시점에 **배치 전체를 멈춘다** — 안 그러면 남은 게시물 전부가 똑같은 이유로 헛되이 실패하기 때문이다. 알림을 설정해뒀다면(위 "무인 운영을 위한 3가지 추가 설정" 참고) 이때 Slack/이메일로도 알려준다.
+4. **이어서 진행(재개)**: 문제를 해결한 뒤(대개 온보딩 스크립트로 재로그인, 또는 `core/naver_selectors.py` 갱신) 같은 명령(`python daily_batch.py --blog-id ...`)을 다시 실행하면, 새로 리서치를 돌리지 않고 **멈췄던 시점부터**(게시물 단위가 아니라 그 게시물이 멈춘 단계부터) 이어서 진행한다. 오늘 배치가 이미 끝까지 완료돼 있으면 아무 일도 하지 않고 그대로 기존 결과를 보여준다. 처음부터 다시 돌리고 싶으면 `--force-rerun`을 준다.
 
-   남은 글감을 억지로 더 실패시키지 않고 **배치를 즉시 멈춘다.** `batch_state.json`에 `"paused": true`와 `paused_reason`을 남기고, 콘솔에도 중단 사유를 출력한다.
-3. **이어서 진행(재개)**: 문제를 해결한 뒤(대개 온보딩 스크립트로 재로그인) 같은 명령(`python daily_batch.py --blog-id ...`)을 다시 실행하면, 새로 리서치를 돌리지 않고 **멈췄던 글감부터** 이어서 진행한다. 오늘 배치가 이미 끝까지 완료돼 있으면 아무 일도 하지 않고 그대로 기존 결과를 보여준다. 처음부터 다시 돌리고 싶으면 `--force-rerun`을 준다.
-
-`batch_state.json`을 보면 지금까지의 진행 상황을 바로 확인할 수 있다(`"paused"`, `"paused_reason"`, 건별 `"status"`).
+웹 대시보드(`python webapp/app.py`)를 열면 오늘 진행 상황을 실시간으로 확인할 수 있다 — 전체/완료/진행중/실패/검토필요 건수, 계정별·게시물별 9단계 상태, 스케줄러 하트비트(정상/OFFLINE), 단계별 재시도 버튼까지 한 화면에서 본다.
 
 ### 매일 자동 실행되게 만들기
 
@@ -260,7 +256,41 @@ Windows (작업 스케줄러):
 2. 트리거: 매일, 오후 9:30
 3. 동작: 프로그램 시작 → 프로그램/스크립트에 `python.exe` 경로, 인수에 `daily_batch.py --blog-id 내블로그아이디`, 시작 위치에 `naver_blog_automation` 폴더 경로 입력
 
-두 방법 모두 컴퓨터가 그 시각에 켜져 있어야 동작한다는 점, 그리고 로그인 세션이 만료되지 않아야 한다는 점을 기억해야 한다. 배치가 중단된 채 끝났다면 로그(`logs/daily.log` 또는 `logs/scheduler.log`)나 `batch_state.json`의 `paused_reason`으로 원인을 확인하고, 해결한 뒤에는 아무것도 더 할 필요 없이 다음 예정 실행(또는 수동 재실행)에서 자동으로 이어서 진행된다.
+두 방법 모두 컴퓨터가 그 시각에 켜져 있어야 동작한다는 점, 그리고 로그인 세션이 만료되지 않아야 한다는 점을 기억해야 한다. 배치가 중단된 채 끝났다면 로그(`logs/daily.log`, `logs/scheduler.log`, `logs/automation_YYYYMMDD.log`)나 웹 대시보드(`python webapp/app.py`)의 게시물별 단계 상태로 원인을 확인하고, 해결한 뒤에는 아무것도 더 할 필요 없이 다음 예정 실행(또는 수동 재실행)에서 automation.db에 남은 마지막 성공 단계부터 자동으로 이어서 진행된다.
+
+### 무인 운영을 위한 3가지 추가 설정
+
+"컴퓨터 전원만 켜두면" 알아서 매일 돌아가게 하려면, 위의 스케줄 설정과 별개로 아래 세 가지가 더 필요하다. 하나라도 안 돼 있으면 재부팅 후 스케줄러가 안 켜지거나, 컴퓨터가 잠들어서 멈추거나, 배치가 중단된 걸 며칠씩 모르고 지나갈 수 있다.
+
+**1) 재부팅해도 스케줄러가 자동으로 다시 켜지게 하기** (방법 A: 상주 스케줄러를 쓸 때만 해당 — 방법 B인 crontab/작업 스케줄러는 OS가 직접 관리하므로 이 항목이 필요 없다)
+
+`deploy/` 폴더에 OS별 등록 템플릿을 준비해뒀다. 안의 `<여기를-바꾸세요>` 부분을 실제 경로로 바꿔서 등록한다.
+
+- **Linux (systemd)**: `deploy/systemd/naver-blog-scheduler.service` — `sudo cp`로 `/etc/systemd/system/`에 넣고 `sudo systemctl enable --now naver-blog-scheduler`. `Restart=on-failure`가 걸려 있어 프로세스가 죽어도 30초 뒤 자동 재시작되고, `enable`로 재부팅 후에도 자동 시작된다.
+- **macOS (launchd)**: `deploy/launchd/com.naverblog.scheduler.plist` — `~/Library/LaunchAgents/`에 복사하고 `launchctl load`. `KeepAlive`로 크래시 시 재시작, `RunAtLoad`로 로그인 시 자동 시작된다.
+- **Windows (작업 스케줄러)**: `deploy/windows/register_scheduler_task.ps1`을 관리자 권한 PowerShell에서 실행하면 "재부팅 시 시작 + 실패 시 1분 뒤 재시작" 작업이 등록된다.
+
+**2) 절전 모드(잠자기) 끄기** — 컴퓨터가 잠들면 스케줄러 프로세스도 같이 멈춘다.
+
+- **Linux**: 위 systemd 서비스 파일에 `systemd-inhibit --what=sleep:idle:shutdown`이 이미 포함돼 있어 서비스가 실행되는 동안은 자동으로 절전이 안 걸린다.
+- **macOS**: 위 launchd plist가 `caffeinate -dims`로 감싸서 실행하므로 별도 설정이 필요 없다.
+- **Windows**: `register_scheduler_task.ps1`이 `powercfg /change standby-timeout-ac 0`도 같이 실행해 AC 전원 기준 절전을 꺼준다(노트북이라 배터리로도 켜둘 거라면 `powercfg /change standby-timeout-dc 0`도 직접 실행한다).
+
+**3) 배치가 멈췄을 때 알림 받기** — 야간 무인 실행 중 로그인 세션 만료·네이버 UI 변경 같은 시스템적 오류로 배치가 멈추면, 지금까지는 콘솔/로그에만 남고 아무도 모르고 지나갈 수 있었다. `.env`에 아래 중 하나 이상을 채우면 Slack 또는 이메일로 알려준다(`core/notify.py`, 아무 것도 안 채우면 기존처럼 로그에만 남고 조용히 넘어간다 — 선택 기능이다).
+
+```
+# Slack로 받기 (Slack 워크스페이스에서 Incoming Webhook을 만들어 URL을 넣는다)
+NOTIFY_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+
+# 이메일로 받기 (Gmail이면 "앱 비밀번호"를 발급해서 써야 한다 — 일반 비밀번호는 막혀 있다)
+NOTIFY_EMAIL_TO=me@example.com
+NOTIFY_EMAIL_SMTP_HOST=smtp.gmail.com
+NOTIFY_EMAIL_SMTP_PORT=587
+NOTIFY_EMAIL_SMTP_USER=bot@example.com
+NOTIFY_EMAIL_SMTP_PASSWORD=앱비밀번호
+```
+
+알림은 (a) 배치가 시스템적 오류로 중단된 채 끝났을 때, (b) 스케줄러가 예상치 못한 오류로 완전히 죽었을 때 두 경우에 온다. 알림 전송 자체가 실패해도(웹훅 URL 오타 등) 배치 실행에는 영향을 주지 않는다.
 
 ## 폴더 구조
 
@@ -268,9 +298,11 @@ Windows (작업 스케줄러):
 naver_blog_automation/
   main.py                          단발 지시 CLI
   daily_batch.py                   하루 배치 지시 CLI (한 번 실행하고 종료)
-  scheduler.py                     상주 스케줄러 (매일 지정 시각에 daily_batch 역할 자동 실행)
-  manager.py                       총괄 매니저 (부서 배정·보고 취합·재시도·중단 대기)
+  scheduler.py                     상주 스케줄러 (매일 지정 시각에 daily_batch 역할 자동 실행 + 하트비트 + 실패 알림)
+  manager.py                       core/job_manager.py 위의 얇은 호환 계층 (main/daily_batch/scheduler가 부름)
+  migrate_to_sqlite.py             옛 batch_state.json/status.json → automation.db 이관 스크립트
   config.py                        환경변수 로드
+  automation.db                    (실행 시 자동 생성) 모든 실행 상태가 담기는 SQLite DB
   departments/                     다섯 부서
     research.py                     리서치팀 (뉴스 조사)
     planning.py                     기획팀 (제목 기획)
@@ -278,33 +310,48 @@ naver_blog_automation/
     design.py                       디자인팀 (이미지 제작)
     publishing.py                   발행팀 (네이버 임시저장)
     onboarding_publishing.py        발행팀 출근 등록 (네이버 로그인)
-    onboarding_design.py            디자인팀 출근 등록 (챗지피티 로그인)
+    onboarding_design.py            디자인팀 출근 등록 (챗지피티 로그인, 레거시 이미지 경로 쓸 때만 필요)
   core/                            부서들이 공유하는 내부 엔진
-    openai_client.py                OpenAI Responses API 래퍼
-    pipeline.py                     3턴(제목→본문→이미지) 대화 진행
-    image_gen.py                    OpenAI 이미지 생성 API 호출
-    chatgpt_image.py                챗지피티 웹채팅 이미지 생성 자동화
-    naver_poster.py                 네이버 에디터 Playwright 자동화
-    accounts.py                     여러 계정 정보(accounts.json) 로더
-    status.py                       부서별 진행 상태 공유 저장소 (output/status.json)
-  webapp/                          로컬 웹 대시보드
-    app.py                          Flask 서버 (계정/지침 관리, 실행, 상태 API)
-    templates/index.html            3단 제어판 + 진행 현황 패널
-    static/app.js, style.css        프론트엔드
+    database.py                      automation.db 스키마·CRUD (모든 실행 상태의 단일 원천)
+    job_manager.py                   게시물 1건을 9단계로 실행·재개·재시도하는 오케스트레이터
+    retry_policy.py                  오류 유형 분류 + 지수 백오프 재시도 정책
+    duplicate_check.py               임베딩 기반 유사 주제 감지
+    quality_gate.py                  발행 전 품질 점수 산정(PASS/REVIEW/FAILED)
+    account_config.py                configs/accounts/*.yaml 로더
+    naver_selectors.py               네이버 에디터 selector 후보 목록(UI 바뀌면 여기만 고치면 됨)
+    naver_poster.py                  네이버 에디터 Playwright 자동화
+    accounts.py                      여러 계정 정보(accounts.json) 로더 + secrets/ 경로 관리
+    logger.py                        logs/automation_YYYYMMDD.log 평문 로그
+    notify.py                        배치 중단·스케줄러 크래시 시 Slack/이메일 알림
+    openai_client.py                 OpenAI Responses API 래퍼
+    pipeline.py                      3턴(제목→본문→이미지) 대화 진행 + 재개(resume)
+    image_gen.py                     OpenAI 이미지 생성 API 호출(기본 이미지 경로)
+    legacy/chatgpt_image.py          챗지피티 웹채팅 이미지 생성(레거시, image_provider="chatgpt_web"일 때만)
+  configs/accounts/                계정별 동작 설정(YAML) — 글자수/제목 개수/이미지/재시도/품질기준 등
+  webapp/                          로컬 웹 대시보드 (automation.db 기반)
+    app.py                           Flask 서버 (계정/지침 관리, 실행, 오늘 진행 현황+재시도 API)
+    templates/index.html             3단 제어판 + 계정별 게시물×9단계 진행 현황
+    static/app.js, style.css         프론트엔드
+  deploy/                          재부팅 자동시작 등록 템플릿 (systemd/launchd/Windows 작업 스케줄러)
+  tests/                           유닛 테스트(DB, 재개, idempotency, 재시도, 중복감지, 품질검사, 이관, 알림)
   prompts/
     system_prompt.txt               지침 원문 + 자동화 어댑터
   accounts.example.json             여러 계정 운영 시 accounts.json 템플릿
+  secrets/                         (실행 시 생성) 네이버/챗지피티 로그인 세션 — git에 안 올라감
   reports/                         (실행 시 생성) 일일 뉴스 리포트 (계정별 하위 폴더)
-  output/                          (실행 시 생성) 생성된 이미지·배치 상태·status.json
+  output/                          (실행 시 생성) 생성된 이미지, 게시물별 OpenAI 대화 재개용 상태
+  logs/                            (실행 시 생성) 평문 로그
+  backup/                          (마이그레이션 시 생성) 옛 JSON 상태 파일 백업
 ```
 
 ## 선택자가 깨졌을 때
 
-네이버와 챗지피티 둘 다 UI(DOM 구조·클래스명)를 예고 없이 바꾼다. `core/naver_poster.py`(`TITLE_SELECTORS` / `IMAGE_BUTTON_SELECTORS` / `SAVE_BUTTON_SELECTORS`)와 `core/chatgpt_image.py`(`PROMPT_INPUT_SELECTORS` / `SEND_BUTTON_SELECTORS` / `NEW_CHAT_SELECTORS` / `GENERATED_IMAGE_SELECTORS`) 상단에 후보 선택자가 여러 개 들어 있지만, 전부 실패하면:
+네이버와 챗지피티 둘 다 UI(DOM 구조·클래스명)를 예고 없이 바꾼다. `core/naver_selectors.py`(`TITLE_SELECTORS` / `BODY_SELECTORS` / `IMAGE_BUTTON_SELECTORS` / `SAVE_BUTTON_SELECTORS`)와 `core/legacy/chatgpt_image.py`(`PROMPT_INPUT_SELECTORS` / `SEND_BUTTON_SELECTORS` / `NEW_CHAT_SELECTORS` / `GENERATED_IMAGE_SELECTORS`) 안에 후보 선택자가 여러 개 들어 있지만, 전부 실패하면:
 
 1. `--headless` 옵션을 빼고(또는 `--show-browser`로) 실행해서 브라우저 창을 직접 본다.
 2. 막힌 지점에서 F12(개발자도구)로 해당 요소의 클래스명/속성을 확인한다.
-3. 해당 상수 리스트 맨 앞에 새 선택자를 추가한다.
+3. 해당 리스트 맨 앞에 새 선택자를 추가한다.
+4. 이런 오류는 재시도해도 똑같이 막히는 "시스템적 오류"로 분류돼 배치 전체가 멈추고 대기한다(알림을 설정해뒀다면 Slack/이메일로도 온다) — 고치고 나서 다음 예정 실행(또는 수동 재실행)에서 자동으로 이어서 진행된다. `output/errors/<post_id>_naver_error.png`에 오류 시점 스크린샷이 남으니 참고한다.
 
 ## 유의사항
 

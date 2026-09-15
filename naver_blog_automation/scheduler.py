@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from core.database import STEP_NAMES, set_system_status
+from core.notify import notify
 from manager import assign_daily_batch
 
 HEARTBEAT_INTERVAL_SECONDS = 20
@@ -57,13 +58,28 @@ def _run_one_batch(label: str, **kwargs):
     try:
         state = assign_daily_batch(**kwargs)
         if state.get("paused"):
-            print(f"[스케줄러] {label} 배치가 중단된 채로 끝났습니다 — {state.get('paused_reason')}")
+            reason = state.get("paused_reason")
+            print(f"[스케줄러] {label} 배치가 중단된 채로 끝났습니다 — {reason}")
             print(f"[스케줄러] 원인을 해결하면 다음 예정 시각에 이어서 진행됩니다"
                   f"(또는 지금 바로 `python daily_batch.py ...`로 수동 재시도 가능).")
+            # 밤에는 아무도 콘솔을 보고 있지 않으므로, 다음날 아침까지 모르고
+            # 지나가지 않게 Slack/이메일이 설정돼 있으면 알린다(core/notify.py).
+            notify(
+                f"[네이버 블로그 자동화] {label} 배치 중단",
+                f"{label} 배치가 중단된 채로 끝났습니다.\n사유: {reason}\n"
+                "원인을 해결하면(재로그인 등) 다음 예정 시각에 이어서 진행됩니다.",
+                account_id=kwargs.get("account") or kwargs.get("blog_id"),
+            )
     except Exception as e:
         # 매니저 안에서 못 잡은 예상 밖 오류 — 스케줄러 자체는 죽지 않고 내일 다시 시도한다.
         print(f"[스케줄러] {label} 배치 실행 중 예상치 못한 오류가 발생했습니다: {e}")
         print(f"[스케줄러] {label}은 내일 같은 시각에 다시 시도합니다.")
+        notify(
+            f"[네이버 블로그 자동화] {label} 배치 실행 중 예상치 못한 오류",
+            f"{label} 배치 실행 중 예외가 발생했습니다: {e}\n"
+            "스케줄러 프로세스는 죽지 않고 내일 같은 시각에 다시 시도합니다.",
+            account_id=kwargs.get("account") or kwargs.get("blog_id"),
+        )
 
 
 def run_forever(
@@ -152,22 +168,37 @@ def main():
     if not args.blog_id and not args.accounts:
         parser.error("--blog-id 또는 --account 중 하나는 있어야 합니다.")
 
-    run_forever(
-        blog_id=args.blog_id,
-        accounts=args.accounts,
-        hour=args.hour,
-        minute=args.minute,
-        count=args.count,
-        out_dir=args.out_dir,
-        reports_dir=args.reports_dir,
-        headless=args.headless,
-        infographic_via_chatgpt=args.infographic_via_chatgpt,
-        title_strategy=args.title_strategy,
-        max_retries=args.max_retries,
-        retry_wait_seconds=args.retry_wait_seconds,
-        consecutive_failure_limit=args.consecutive_failure_limit,
-        force_step=args.force_step,
-    )
+    try:
+        run_forever(
+            blog_id=args.blog_id,
+            accounts=args.accounts,
+            hour=args.hour,
+            minute=args.minute,
+            count=args.count,
+            out_dir=args.out_dir,
+            reports_dir=args.reports_dir,
+            headless=args.headless,
+            infographic_via_chatgpt=args.infographic_via_chatgpt,
+            title_strategy=args.title_strategy,
+            max_retries=args.max_retries,
+            retry_wait_seconds=args.retry_wait_seconds,
+            consecutive_failure_limit=args.consecutive_failure_limit,
+            force_step=args.force_step,
+        )
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        # _run_one_batch가 못 잡는 진짜 예상 밖 오류(예: 스케줄러 루프
+        # 자체의 버그) — 여기서마저 죽으면 프로세스가 완전히 끝나버리므로
+        # 마지막으로 한 번 알리고 다시 던진다. systemd/launchd 등으로
+        # Restart=on-failure를 걸어뒀다면(README "무인 운영" 참고) 이
+        # 비정상 종료를 보고 자동으로 다시 띄워준다.
+        notify(
+            "[네이버 블로그 자동화] 스케줄러 프로세스가 죽었습니다",
+            f"scheduler.py가 예상치 못한 오류로 종료됩니다: {e}\n"
+            "재시작 설정(systemd 등)이 안 돼 있다면 수동으로 다시 실행해야 합니다.",
+        )
+        raise
 
 
 if __name__ == "__main__":

@@ -28,3 +28,13 @@ QUALITY_GATE_REVIEW_SCORE = int(os.getenv("QUALITY_GATE_REVIEW_SCORE", "70"))
 DUPLICATE_CHECK_WINDOW_DAYS = int(os.getenv("DUPLICATE_CHECK_WINDOW_DAYS", "30"))
 DUPLICATE_SIMILARITY_THRESHOLD = float(os.getenv("DUPLICATE_SIMILARITY_THRESHOLD", "0.85"))
 OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+
+# 실패 알림 (core/notify.py) — 야간 무인 배치가 시스템적 오류로 멈추거나
+# 스케줄러가 예상치 못하게 죽었을 때 사람에게 알린다. 아래 둘 다 비워두면
+# (기본값) 콘솔/로그 파일에만 남기고 조용히 넘어간다 — 선택 기능이다.
+NOTIFY_SLACK_WEBHOOK_URL = os.getenv("NOTIFY_SLACK_WEBHOOK_URL", "")
+NOTIFY_EMAIL_TO = os.getenv("NOTIFY_EMAIL_TO", "")
+NOTIFY_EMAIL_SMTP_HOST = os.getenv("NOTIFY_EMAIL_SMTP_HOST", "")
+NOTIFY_EMAIL_SMTP_PORT = int(os.getenv("NOTIFY_EMAIL_SMTP_PORT", "587"))
+NOTIFY_EMAIL_SMTP_USER = os.getenv("NOTIFY_EMAIL_SMTP_USER", "")
+NOTIFY_EMAIL_SMTP_PASSWORD = os.getenv("NOTIFY_EMAIL_SMTP_PASSWORD", "")

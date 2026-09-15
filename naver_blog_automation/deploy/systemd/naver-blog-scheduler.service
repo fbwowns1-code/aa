@@ -1,0 +1,39 @@
+# Linux(systemd)에서 scheduler.py를 "재부팅해도 자동 시작 + 죽으면 자동
+# 재시작"되는 서비스로 등록하기 위한 유닛 파일 템플릿.
+#
+# 설치 방법(README "무인 운영을 위한 3가지 추가 설정" 참고):
+#   0) mkdir -p logs   (StandardOutput/StandardError가 append할 파일의
+#      상위 폴더가 미리 있어야 한다 — 없으면 서비스 시작 자체가 실패한다)
+#   1) 아래 <여기를-바꾸세요> 부분을 실제 경로/계정/사용자명으로 바꾼다.
+#   2) sudo cp deploy/systemd/naver-blog-scheduler.service \
+#        /etc/systemd/system/naver-blog-scheduler.service
+#   3) sudo systemctl daemon-reload
+#   4) sudo systemctl enable --now naver-blog-scheduler
+#   5) 상태 확인: systemctl status naver-blog-scheduler
+#      로그 확인: journalctl -u naver-blog-scheduler -f
+#
+# Restart=on-failure로 예상치 못한 크래시 시 자동 재시작되고,
+# WantedBy=multi-user.target + enable로 재부팅 후에도 자동 시작된다.
+# systemd-inhibit으로 이 서비스가 실행되는 동안은 절전/최대절전을 막는다
+# (컴퓨터를 다른 용도로도 쓴다면 이 부분만 지우고 README의 "절전 방지"
+# 항목을 따로 적용해도 된다).
+
+[Unit]
+Description=Naver Blog Automation Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<여기를-바꾸세요: 예: ubuntu>
+WorkingDirectory=<여기를-바꾸세요: 예: /home/ubuntu/naver_blog_automation>
+# --account를 여러 번 줘서 여러 계정을 동시에 등록할 수 있다(scheduler.py --help 참고).
+ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle:shutdown --why="네이버 블로그 자동화 스케줄러 실행 중" \
+    <여기를-바꾸세요: 예: /home/ubuntu/naver_blog_automation/.venv/bin/python3> scheduler.py --account <계정이름>
+Restart=on-failure
+RestartSec=30
+StandardOutput=append:<여기를-바꾸세요: 예: /home/ubuntu/naver_blog_automation/logs/scheduler.out.log>
+StandardError=append:<여기를-바꾸세요: 예: /home/ubuntu/naver_blog_automation/logs/scheduler.err.log>
+
+[Install]
+WantedBy=multi-user.target

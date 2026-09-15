@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+macOS(launchd)에서 scheduler.py를 "재부팅/재로그인해도 자동 시작 + 죽으면
+자동 재시작"되는 에이전트로 등록하기 위한 plist 템플릿.
+
+설치 방법(README "무인 운영을 위한 3가지 추가 설정" 참고):
+  0) mkdir -p logs   (StandardOutPath/StandardErrorPath가 쓸 파일의 상위
+     폴더가 미리 있어야 한다 — 없으면 launchd가 시작 자체를 실패로 본다)
+  1) 아래 <여기를-바꾸세요> 부분을 실제 경로로 바꾼다.
+  2) cp deploy/launchd/com.naverblog.scheduler.plist \
+       ~/Library/LaunchAgents/com.naverblog.scheduler.plist
+  3) launchctl load ~/Library/LaunchAgents/com.naverblog.scheduler.plist
+  4) 상태 확인: launchctl list | grep naverblog
+     로그 확인: tail -f logs/scheduler.out.log
+
+KeepAlive로 예상치 못한 크래시 시 자동 재시작되고, RunAtLoad + 로그인 시
+LaunchAgent가 자동 실행되어 재부팅 후에도 자동 시작된다. ProcessType을
+Interactive로 두면 macOS가 앱 넛지(App Nap)로 이 프로세스를 절전시키는
+것을 어느 정도 막아주지만, 완전한 절전 방지는 README의 caffeinate 안내를
+같이 따라야 한다.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.naverblog.scheduler</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-dims</string>
+        <string>&lt;여기를-바꾸세요: 예: /Users/me/naver_blog_automation/.venv/bin/python3&gt;</string>
+        <string>scheduler.py</string>
+        <string>--account</string>
+        <string>&lt;계정이름&gt;</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>&lt;여기를-바꾸세요: 예: /Users/me/naver_blog_automation&gt;</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>&lt;여기를-바꾸세요: 예: /Users/me/naver_blog_automation/logs/scheduler.out.log&gt;</string>
+
+    <key>StandardErrorPath</key>
+    <string>&lt;여기를-바꾸세요: 예: /Users/me/naver_blog_automation/logs/scheduler.err.log&gt;</string>
+</dict>
+</plist>
