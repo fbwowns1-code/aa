@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>네이버 블로그 자동화 제어판</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>네이버 블로그 자동화 제어판</h1>
+
+  <section id="status-panel" class="panel">
+    <h2>부서별 진행 현황</h2>
+    <div id="status-label" class="status-label">대기 중</div>
+    <div id="status-post" class="status-post"></div>
+    <div id="dept-grid" class="dept-grid"></div>
+    <div id="status-error" class="status-error" hidden></div>
+  </section>
+
+  <div class="column">
+
+    <section class="panel">
+      <h2>1. 계정</h2>
+      <label>사용할 계정
+        <select id="account-select"></select>
+      </label>
+
+      <details>
+        <summary>계정 추가 / 수정</summary>
+        <label>계정 이름 (영문/숫자 권장)
+          <input id="acc-name" type="text" placeholder="car_it_blog">
+        </label>
+        <label>네이버 블로그 ID
+          <input id="acc-blogid" type="text" placeholder="blog.naver.com/이 부분">
+        </label>
+        <label>네이버 로그인 아이디
+          <input id="acc-naverid" type="text" placeholder="로그인 자동 입력용 (선택)">
+        </label>
+        <label>네이버 로그인 비밀번호
+          <input id="acc-naverpw" type="password" placeholder="비워두면 기존 값 유지">
+        </label>
+        <button id="btn-save-account">계정 저장</button>
+        <p class="hint">
+          비밀번호는 로그인 폼에 자동 입력하는 용도로만 쓰이고 이 화면에 다시 표시되지 않는다.
+          저장 후에는 터미널에서 <code>python -m departments.onboarding_publishing --account 계정이름</code>을
+          한 번 실행해서 세션을 만들어야 실제로 로그인이 된다.
+        </p>
+        <div id="account-msg" class="msg"></div>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>2. 지침</h2>
+      <label>저장된 지침 파일
+        <select id="prompt-select"></select>
+      </label>
+      <button id="btn-select-prompt">이 지침을 선택한 계정에 연결</button>
+      <div id="prompt-select-msg" class="msg"></div>
+
+      <details>
+        <summary>지침 새로 쓰기 / 수정하기</summary>
+        <label>파일 이름
+          <input id="prompt-filename" type="text" placeholder="cooking_blog.txt">
+        </label>
+        <label>지침 내용
+          <textarea id="prompt-content" rows="10" placeholder="이 지침 파일의 전체 내용을 여기에 붙여넣거나 작성한다.&#10;(턴1/턴2/턴3 구조와 맨 아래 자동화 어댑터 섹션은 유지해야 한다 — README 참고)"></textarea>
+        </label>
+        <button id="btn-save-prompt">지침 파일 저장</button>
+        <div id="prompt-save-msg" class="msg"></div>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>3. 실행</h2>
+      <label>키워드 또는 제목 (단발 실행용)
+        <input id="run-keyword" type="text" placeholder="쏘렌토 풀체인지 MQ5">
+      </label>
+      <label>참고 본문 (선택)
+        <textarea id="run-reference" rows="3" placeholder="기사·메모 등 (팩트 소스로만 쓰인다)"></textarea>
+      </label>
+      <button id="btn-run-single">단발 실행 (이 키워드로 1건)</button>
+
+      <hr>
+
+      <label>하루 배치 포스트 개수
+        <input id="run-count" type="number" min="1" max="20" value="8">
+      </label>
+      <button id="btn-run-daily">하루 배치 실행 (뉴스 조사 + N건)</button>
+
+      <p class="hint">
+        여기서 실행하면 항상 완전 자동 모드로 진행된다(제목 1번 자동 채택, 중간에 수정 요청 불가).
+        턴마다 대화하면서 고치고 싶으면 터미널에서 <code>python main.py</code>를 직접 실행한다.
+      </p>
+      <div id="run-msg" class="msg"></div>
+    </section>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

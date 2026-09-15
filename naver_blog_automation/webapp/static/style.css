@@ -1,0 +1,162 @@
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  max-width: 720px;
+  margin: 24px auto;
+  padding: 0 16px;
+  color: #222;
+  background: #f7f7f8;
+}
+
+h1 { font-size: 1.4rem; margin-bottom: 16px; }
+h2 { font-size: 1.05rem; margin: 0 0 12px; }
+
+.panel {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: #444;
+  margin: 10px 0 4px;
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 0.9rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+textarea { resize: vertical; }
+
+button {
+  margin-top: 10px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  border: none;
+  border-radius: 6px;
+  background: #2a6df5;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:hover { background: #1d58d6; }
+button:disabled { background: #aaa; cursor: not-allowed; }
+
+details {
+  margin-top: 12px;
+  border-top: 1px dashed #ddd;
+  padding-top: 8px;
+}
+
+summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #2a6df5;
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: #777;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.hint code {
+  background: #eee;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.msg {
+  font-size: 0.82rem;
+  margin-top: 8px;
+  min-height: 1.1em;
+}
+
+.msg.ok { color: #1a8a3a; }
+.msg.err { color: #c0392b; }
+
+hr {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 16px 0;
+}
+
+/* 상태 패널 */
+
+.status-label {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.status-post {
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 12px;
+}
+
+.dept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.dept-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fafafa;
+}
+
+.dept-card .dept-name {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.dept-card .dept-state {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.dept-card .dept-detail {
+  font-size: 0.72rem;
+  color: #888;
+  margin-top: 3px;
+  word-break: break-word;
+}
+
+.dept-card.state-대기 { border-color: #ddd; }
+.dept-card.state-해당없음 { border-color: #ddd; opacity: 0.6; }
+.dept-card.state-진행중 { border-color: #2a6df5; background: #eef3ff; }
+.dept-card.state-진행중 .dept-state { color: #2a6df5; }
+.dept-card.state-완료 { border-color: #1a8a3a; background: #eefbf1; }
+.dept-card.state-완료 .dept-state { color: #1a8a3a; }
+.dept-card.state-실패 { border-color: #c0392b; background: #fdecea; }
+.dept-card.state-실패 .dept-state { color: #c0392b; }
+
+.status-error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fdecea;
+  color: #c0392b;
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+}

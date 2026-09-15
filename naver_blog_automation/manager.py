@@ -22,6 +22,7 @@ from typing import Optional
 from config import PROMPT_PATH as DEFAULT_PROMPT_PATH
 from core.pipeline import BlogPipeline
 from core.accounts import get_account, naver_session_file_for, chatgpt_session_file_for, prompt_path_for
+from core import status
 from departments import research, planning, writing, design, publishing
 
 # 배치 중 이 문구가 오류 메시지에 들어 있으면 "재시도해도 소용없는" 치명적
@@ -77,6 +78,7 @@ def assign_single_post(
     auto: bool = False,
     infographic_via_chatgpt: bool = True,
     prompt_path: Optional[str] = None,
+    _batch_mode: bool = False,
 ) -> dict:
     """글 한 편을 기획→작성→디자인→발행 순서로 만들어 네이버에 임시저장한다.
 
@@ -90,6 +92,11 @@ def assign_single_post(
     마다 전혀 다른 글쓰기 지침을 쓸 수 있다는 뜻이다(자동차 블로그 계정은
     자동차 지침, 요리 블로그 계정은 요리 지침처럼).
 
+    _batch_mode: assign_daily_batch가 내부적으로 호출할 때 True로 준다.
+    True면 이 함수가 전체 진행 상태(core.status)의 배치 정보를 새로
+    시작하거나 끝내지 않는다 — 바깥(assign_daily_batch)이 이미 관리 중이기
+    때문이다. 직접 호출(단발 실행)할 때는 신경 쓸 필요 없다.
+
     반환값: {"keyword", "title", "char_count", "image_count"}
     """
     account_info = get_account(account) if account else None
@@ -101,38 +108,61 @@ def assign_single_post(
     chatgpt_session_file = chatgpt_session_file_for(account, account_info)
     resolved_prompt_path = prompt_path or prompt_path_for(account_info) or DEFAULT_PROMPT_PATH
 
+    if not _batch_mode:
+        status.start_batch(1, label=f"단발: {keyword}")
+        status.set_current_post(1)
+        status.update_department("research", "해당없음", "단발 실행은 리서치팀을 거치지 않는다")
+
     who = f"'{account}' 계정" if account else f"블로그 {blog_id}"
     print(f"\n[매니저] {who}로 '{keyword}' 건을 접수해서 기획팀에 넘깁니다. "
           f"(지침: {resolved_prompt_path})")
-    pipeline = BlogPipeline(load_system_prompt(resolved_prompt_path))
 
-    turn1 = planning.propose_titles(pipeline, keyword, reference, extra)
-    chosen_no = planning.select_title(pipeline, turn1, auto, title_index)
-    chosen = next(t for t in turn1["titles"] if t["no"] == chosen_no)
-    print(f"[매니저] 기획팀 결과 확정: {chosen_no}번 «{chosen['text']}» → 작성팀에 넘깁니다.")
+    try:
+        pipeline = BlogPipeline(load_system_prompt(resolved_prompt_path))
 
-    turn2 = writing.draft_body(pipeline, chosen_no)
-    turn2 = writing.finalize(pipeline, turn2, auto)
-    print("[매니저] 작성팀 최종본을 넘겨받아 디자인팀에 전달합니다.")
+        status.update_department("planning", "진행중", "제목 후보 생성 중")
+        turn1 = planning.propose_titles(pipeline, keyword, reference, extra)
+        chosen_no = planning.select_title(pipeline, turn1, auto, title_index)
+        chosen = next(t for t in turn1["titles"] if t["no"] == chosen_no)
+        status.update_department("planning", "완료", f"{chosen_no}번 «{chosen['text']}» 확정")
+        print(f"[매니저] 기획팀 결과 확정: {chosen_no}번 «{chosen['text']}» → 작성팀에 넘깁니다.")
 
-    turn3 = design.propose_visuals(pipeline)
-    turn3 = design.finalize(pipeline, turn3, auto)
-    images = design.produce_images(
-        turn3, out_dir, via_chatgpt=infographic_via_chatgpt, headless=headless,
-        chatgpt_session_file=chatgpt_session_file,
-    )
-    print(f"[매니저] 디자인팀 이미지 {len(images)}장을 넘겨받아 발행팀에 전달합니다.")
+        status.update_department("writing", "진행중", "본문 작성·팩트체크 중")
+        turn2 = writing.draft_body(pipeline, chosen_no)
+        turn2 = writing.finalize(pipeline, turn2, auto)
+        status.update_department("writing", "완료", f"{turn2.get('char_count', '?')}자")
+        print("[매니저] 작성팀 최종본을 넘겨받아 디자인팀에 전달합니다.")
 
-    publishing.publish_draft(
-        blog_id=blog_id,
-        title=turn2["title"],
-        sections=turn2["sections"],
-        tags=turn2["tags"],
-        images=images,
-        headless=headless,
-        pause_before_save=pause_before_save,
-        session_file=naver_session_file,
-    )
+        status.update_department("design", "진행중", "인포그래픽 이미지 제작 중")
+        turn3 = design.propose_visuals(pipeline)
+        turn3 = design.finalize(pipeline, turn3, auto)
+        images = design.produce_images(
+            turn3, out_dir, via_chatgpt=infographic_via_chatgpt, headless=headless,
+            chatgpt_session_file=chatgpt_session_file,
+        )
+        status.update_department("design", "완료", f"이미지 {len(images)}장")
+        print(f"[매니저] 디자인팀 이미지 {len(images)}장을 넘겨받아 발행팀에 전달합니다.")
+
+        status.update_department("publishing", "진행중", "네이버 블로그 임시저장 중")
+        publishing.publish_draft(
+            blog_id=blog_id,
+            title=turn2["title"],
+            sections=turn2["sections"],
+            tags=turn2["tags"],
+            images=images,
+            headless=headless,
+            pause_before_save=pause_before_save,
+            session_file=naver_session_file,
+        )
+        status.update_department("publishing", "완료", f"«{turn2['title']}» 임시저장")
+    except Exception as e:
+        status.mark_failed(str(e))
+        if not _batch_mode:
+            status.mark_finished(error=str(e))
+        raise
+
+    if not _batch_mode:
+        status.mark_finished()
 
     return {
         "keyword": keyword,
@@ -161,6 +191,7 @@ def _attempt_post(keyword, blog_id, account, reference, post_out_dir, headless,
                 auto=True,  # 기획팀 1번 제목 자동 채택, 재작업 지시 없음
                 infographic_via_chatgpt=infographic_via_chatgpt,
                 prompt_path=prompt_path,
+                _batch_mode=True,
             )
             return result, None
         except Exception as e:
@@ -218,6 +249,7 @@ def assign_daily_batch(
         raise ValueError("blog_id가 없습니다. --blog-id를 직접 주거나, "
                           "--account로 blog_id가 등록된 계정을 지정하세요.")
 
+    batch_label = f"하루 배치: {account or blog_id}"
     today = date.today().isoformat()
     existing = None if force_rerun else _load_state(_state_path(out_dir, today, account))
 
@@ -225,6 +257,9 @@ def assign_daily_batch(
             and len(existing.get("results", [])) >= existing["topics_total"]:
         print(f"[매니저] 오늘({today}) 배치는 이미 끝까지 완료되어 있습니다. "
               "다시 돌리려면 force_rerun=True로 호출하세요.")
+        status.start_batch(existing["topics_total"], label=batch_label)
+        status.set_current_post(existing["topics_total"])
+        status.mark_finished()
         return existing
 
     if existing:
@@ -232,13 +267,19 @@ def assign_daily_batch(
         state = existing
         state["paused"] = False
         state["paused_reason"] = None
+        status.start_batch(state["topics_total"], label=f"{batch_label} (이어서 진행)")
+        status.update_department("research", "완료", f"글감 {state['topics_total']}건 (이전 조사 재사용)")
     else:
+        status.start_batch(0, label=f"{batch_label} — 리서치 중")
+        status.update_department("research", "진행중", "오늘의 글감 조사 중")
         # 계정별로 리포트 폴더를 나눠야 같은 날 여러 계정을 배치 돌려도
         # reports/<날짜>.json이 서로 덮어써지지 않는다.
         account_reports_dir = str(Path(reports_dir) / account) if account else reports_dir
         report = research.investigate(save_dir=account_reports_dir)
         report_date = report.get("report_date", today)
         topics = report.get("selected_topics", [])[:count]
+        status.set_total_posts(len(topics))
+        status.update_department("research", "완료", f"글감 {len(topics)}건 선정")
         state = {
             "report_date": report_date,
             "account": account,
@@ -251,6 +292,7 @@ def assign_daily_batch(
         }
         if not topics:
             print("[매니저] 리서치팀이 선정한 글감이 없어서 오늘 배치는 종료합니다.")
+            status.mark_finished(error="선정된 글감 없음")
             return state
 
     state_path = _state_path(out_dir, state["report_date"], account)
@@ -264,6 +306,7 @@ def assign_daily_batch(
         keyword = topic.get("keyword", "")
         reference = topic.get("reference", "")
         print(f"\n===== [매니저] {i + 1}/{len(topics)}번째 건 배정: {keyword} =====")
+        status.set_current_post(i + 1)
 
         result, error = _attempt_post(
             keyword, blog_id, account, reference, str(today_out_dir / f"post_{i + 1:02d}"),
@@ -295,6 +338,7 @@ def assign_daily_batch(
             state["paused_reason"] = reason
             state["paused_at"] = datetime.now().isoformat(timespec="seconds")
             _save_state(state_path, state)
+            status.mark_finished(error=reason)
             return state
 
         _save_state(state_path, state)
@@ -302,4 +346,5 @@ def assign_daily_batch(
     ok = sum(1 for r in results if r.get("status") == "ok")
     print(f"\n[매니저] 오늘 배치 완료: {ok}/{len(results)}건 성공. 기록: {state_path}")
     _save_state(state_path, state)
+    status.mark_finished()
     return state
