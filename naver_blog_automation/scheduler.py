@@ -59,7 +59,7 @@ def run_forever(
     reports_dir: str = "reports",
     headless: bool = True,
     infographic_via_chatgpt: bool = True,
-    title_strategy: str = "hook_curiosity_mix",
+    title_strategy: str = "ai_click_appeal",
     max_retries: int = 1,
     retry_wait_seconds: int = 60,
     consecutive_failure_limit: int = 2,
@@ -112,8 +112,8 @@ def main():
                          help="브라우저 창을 띄워서 확인하고 싶을 때(테스트용)")
     parser.add_argument("--no-infographic-via-chatgpt", dest="infographic_via_chatgpt",
                          action="store_false", default=True)
-    parser.add_argument("--title-strategy", default="hook_curiosity_mix",
-                         choices=["hook_curiosity_mix", "first"])
+    parser.add_argument("--title-strategy", default="ai_click_appeal",
+                         choices=["ai_click_appeal", "hook_curiosity_mix", "first"])
     parser.add_argument("--max-retries", type=int, default=1)
     parser.add_argument("--retry-wait-seconds", type=int, default=60)
     parser.add_argument("--consecutive-failure-limit", type=int, default=2)

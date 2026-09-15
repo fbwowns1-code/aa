@@ -51,10 +51,12 @@ def main():
     parser.add_argument("--prompt-path", default=None,
                          help="글쓰기 지침 파일 경로를 직접 지정한다. 생략하면 계정에 등록된 "
                               "지침 또는 .env의 기본 지침을 쓴다")
-    parser.add_argument("--title-strategy", default="hook_curiosity_mix",
-                         choices=["hook_curiosity_mix", "first"],
-                         help="제목 자동 채택 방식. hook_curiosity_mix(기본값)는 후킹/클릭 유도형+"
-                              "궁금증 폭발형 중 가장 짧은 제목, first는 SEO 최적화형 1번")
+    parser.add_argument("--title-strategy", default="ai_click_appeal",
+                         choices=["ai_click_appeal", "hook_curiosity_mix", "first"],
+                         help="제목 자동 채택 방식. ai_click_appeal(기본값)은 후킹/클릭 유도형+"
+                              "궁금증 폭발형 후보를 놓고 웹에서 반응 좋은 실제 제목 사례를 찾아본 "
+                              "뒤 AI가 직접 고름, hook_curiosity_mix는 같은 후보 중 가장 짧은 "
+                              "제목, first는 SEO 최적화형 1번")
     parser.add_argument("--count", type=int, default=8, help="오늘 만들 포스트 개수 (기본 8개)")
     parser.add_argument("--out-dir", default="output", help="포스트별 이미지 저장 폴더의 상위 경로")
     parser.add_argument("--reports-dir", default="reports", help="뉴스 리포트 저장 폴더")

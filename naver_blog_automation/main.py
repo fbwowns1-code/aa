@@ -14,9 +14,11 @@
 끝까지 자동 진행한다.
 
 --auto일 때 기획팀이 제목을 어떻게 고를지는 --title-strategy로 정한다.
-기본값 "hook_curiosity_mix"는 후킹/클릭 유도형(6~10번)과 궁금증
-폭발형(21~25번)을 섞어서 그중 가장 짧은 제목을 고른다. "first"를 주면
-예전처럼 SEO 최적화형 1번을 그대로 쓴다.
+기본값 "ai_click_appeal"은 후킹/클릭 유도형(6~10번)과 궁금증
+폭발형(21~25번)을 후보로 놓고, 웹에서 반응 좋은 실제 제목 사례를 찾아본
+뒤 그 패턴에 맞는 제목을 AI가 직접 판단해서 고른다. "hook_curiosity_mix"는
+같은 후보 중 가장 짧은 제목을 기계적으로 고르고, "first"를 주면 예전처럼
+SEO 최적화형 1번을 그대로 쓴다.
 
 여러 네이버 계정(여러 블로그)을 운영한다면 --blog-id 대신 --account로
 accounts.json에 등록된 계정 이름을 주면 blog_id·로그인 세션·글쓰기 지침
@@ -47,11 +49,12 @@ def main():
     parser.add_argument("--extra", default="", help="처음부터 반영하고 싶은 추가 요청사항(선택)")
     parser.add_argument("--title-index", type=int, default=None,
                          help="선택할 제목 번호를 미리 고정한다(대화형 프롬프트 생략, --auto와 함께 쓸 때 유용)")
-    parser.add_argument("--title-strategy", default="hook_curiosity_mix",
-                         choices=["hook_curiosity_mix", "first"],
-                         help="--auto일 때 제목 자동 채택 방식. hook_curiosity_mix(기본값)는 "
-                              "후킹/클릭 유도형+궁금증 폭발형 중 가장 짧은 제목, "
-                              "first는 SEO 최적화형 1번")
+    parser.add_argument("--title-strategy", default="ai_click_appeal",
+                         choices=["ai_click_appeal", "hook_curiosity_mix", "first"],
+                         help="--auto일 때 제목 자동 채택 방식. ai_click_appeal(기본값)은 "
+                              "후킹/클릭 유도형+궁금증 폭발형 후보를 놓고 웹에서 반응 좋은 실제 "
+                              "제목 사례를 찾아본 뒤 AI가 직접 고름, hook_curiosity_mix는 같은 "
+                              "후보 중 가장 짧은 제목, first는 SEO 최적화형 1번")
     parser.add_argument("--blog-id", default=None, help="네이버 블로그 ID (blog.naver.com/아이디). --account를 쓰면 생략 가능")
     parser.add_argument("--account", default=None, help="accounts.json에 등록된 계정 이름 (여러 계정을 운영할 때)")
     parser.add_argument("--prompt-path", default=None,

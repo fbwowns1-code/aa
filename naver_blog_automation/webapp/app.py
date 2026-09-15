@@ -170,7 +170,7 @@ def run():
     if not account:
         return jsonify({"error": "계정을 선택해주세요."}), 400
 
-    title_strategy = data.get("title_strategy") or "hook_curiosity_mix"
+    title_strategy = data.get("title_strategy") or "ai_click_appeal"
 
     if mode == "single":
         keyword = (data.get("keyword") or "").strip()

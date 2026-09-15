@@ -84,9 +84,11 @@ def assign_single_post(
     """글 한 편을 기획→작성→디자인→발행 순서로 만들어 네이버에 임시저장한다.
 
     title_strategy는 auto=True일 때 기획팀이 제목을 어떻게 자동으로 고를지
-    정한다 — "hook_curiosity_mix"(기본값)는 후킹/클릭 유도형과 궁금증
-    폭발형을 섞어 그중 가장 짧은 제목을 고르고, "first"는 SEO 최적화형
-    1번을 그대로 쓴다(departments/planning.py 참고).
+    정한다 — "ai_click_appeal"(기본값)은 후킹/클릭 유도형+궁금증 폭발형
+    후보를 놓고 웹에서 반응 좋은 실제 제목 사례를 찾아본 뒤 그 패턴에
+    맞는 제목을 AI가 직접 판단해서 고르고, "hook_curiosity_mix"는 같은
+    후보 중 가장 짧은 제목을 기계적으로, "first"는 SEO 최적화형 1번을
+    그대로 쓴다(departments/planning.py 참고).
 
     여러 계정을 운영한다면 account에 accounts.json의 계정 이름을 주면
     blog_id와 로그인 세션 파일을 그 계정 것으로 자동으로 고른다(blog_id를
@@ -128,7 +130,7 @@ def assign_single_post(
 
         status.update_department("planning", "진행중", "제목 후보 생성 중")
         turn1 = planning.propose_titles(pipeline, keyword, reference, extra)
-        chosen_no = planning.select_title(pipeline, turn1, auto, title_index, title_strategy)
+        chosen_no = planning.select_title(pipeline, turn1, auto, title_index, title_strategy, keyword)
         chosen = next(t for t in turn1["titles"] if t["no"] == chosen_no)
         status.update_department("planning", "완료", f"{chosen_no}번 «{chosen['text']}» 확정")
         print(f"[매니저] 기획팀 결과 확정: {chosen_no}번 «{chosen['text']}» → 작성팀에 넘깁니다.")
