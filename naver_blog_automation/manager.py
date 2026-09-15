@@ -78,9 +78,15 @@ def assign_single_post(
     auto: bool = False,
     infographic_via_chatgpt: bool = True,
     prompt_path: Optional[str] = None,
+    title_strategy: str = planning.DEFAULT_TITLE_STRATEGY,
     _batch_mode: bool = False,
 ) -> dict:
     """글 한 편을 기획→작성→디자인→발행 순서로 만들어 네이버에 임시저장한다.
+
+    title_strategy는 auto=True일 때 기획팀이 제목을 어떻게 자동으로 고를지
+    정한다 — "hook_curiosity_mix"(기본값)는 후킹/클릭 유도형과 궁금증
+    폭발형을 섞어 그중 가장 짧은 제목을 고르고, "first"는 SEO 최적화형
+    1번을 그대로 쓴다(departments/planning.py 참고).
 
     여러 계정을 운영한다면 account에 accounts.json의 계정 이름을 주면
     blog_id와 로그인 세션 파일을 그 계정 것으로 자동으로 고른다(blog_id를
@@ -122,7 +128,7 @@ def assign_single_post(
 
         status.update_department("planning", "진행중", "제목 후보 생성 중")
         turn1 = planning.propose_titles(pipeline, keyword, reference, extra)
-        chosen_no = planning.select_title(pipeline, turn1, auto, title_index)
+        chosen_no = planning.select_title(pipeline, turn1, auto, title_index, title_strategy)
         chosen = next(t for t in turn1["titles"] if t["no"] == chosen_no)
         status.update_department("planning", "완료", f"{chosen_no}번 «{chosen['text']}» 확정")
         print(f"[매니저] 기획팀 결과 확정: {chosen_no}번 «{chosen['text']}» → 작성팀에 넘깁니다.")
@@ -173,7 +179,7 @@ def assign_single_post(
 
 
 def _attempt_post(keyword, blog_id, account, reference, post_out_dir, headless,
-                   infographic_via_chatgpt, prompt_path, max_retries, retry_wait_seconds):
+                   infographic_via_chatgpt, prompt_path, title_strategy, max_retries, retry_wait_seconds):
     """한 건을 최대 (1 + max_retries)번 시도한다. 치명적 오류로 보이면
     재시도 없이 바로 실패로 반환한다(재시도해도 똑같이 막힐 문제이므로)."""
     attempt = 0
@@ -188,9 +194,10 @@ def _attempt_post(keyword, blog_id, account, reference, post_out_dir, headless,
                 out_dir=post_out_dir,
                 headless=headless,
                 pause_before_save=False,  # 야간 무인 실행 — 확인 대기 없음
-                auto=True,  # 기획팀 1번 제목 자동 채택, 재작업 지시 없음
+                auto=True,  # 기획팀이 title_strategy대로 자동 채택, 재작업 지시 없음
                 infographic_via_chatgpt=infographic_via_chatgpt,
                 prompt_path=prompt_path,
+                title_strategy=title_strategy,
                 _batch_mode=True,
             )
             return result, None
@@ -215,6 +222,7 @@ def assign_daily_batch(
     headless: bool = True,
     infographic_via_chatgpt: bool = True,
     prompt_path: Optional[str] = None,
+    title_strategy: str = planning.DEFAULT_TITLE_STRATEGY,
     max_retries: int = 1,
     retry_wait_seconds: int = 60,
     consecutive_failure_limit: int = 2,
@@ -310,7 +318,7 @@ def assign_daily_batch(
 
         result, error = _attempt_post(
             keyword, blog_id, account, reference, str(today_out_dir / f"post_{i + 1:02d}"),
-            headless, infographic_via_chatgpt, prompt_path, max_retries, retry_wait_seconds,
+            headless, infographic_via_chatgpt, prompt_path, title_strategy, max_retries, retry_wait_seconds,
         )
 
         if error is None:

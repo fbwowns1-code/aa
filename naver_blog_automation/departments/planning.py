@@ -10,6 +10,33 @@
 
 from core.pipeline import BlogPipeline
 
+# 지침 원문(턴1 1-5절)의 카테고리 이름과 정확히 같아야 매칭된다.
+HOOK_CATEGORY = "후킹/클릭 유도형"       # 6~10번
+CURIOSITY_CATEGORY = "궁금증 폭발형"     # 21~25번
+
+
+def _choose_first(titles: list) -> int:
+    """가장 기본적인 채택 방식 — SEO 최적화형 1번을 그대로 쓴다."""
+    return titles[0]["no"]
+
+
+def _choose_hook_curiosity_short(titles: list) -> int:
+    """후킹/클릭 유도형과 궁금증 폭발형을 섞은 후보(총 10개) 중에서
+    가장 짧은 제목을 고른다. 두 카테고리 다 후킹 장치가 강해서 길어지기
+    쉬운데, 그중 짧고 간결한 쪽을 우선해서 제목이 늘어지지 않게 한다."""
+    candidates = [t for t in titles if t.get("category") in (HOOK_CATEGORY, CURIOSITY_CATEGORY)]
+    if not candidates:
+        return _choose_first(titles)
+    shortest = min(candidates, key=lambda t: len(t.get("text", "")))
+    return shortest["no"]
+
+
+TITLE_STRATEGIES = {
+    "first": _choose_first,
+    "hook_curiosity_mix": _choose_hook_curiosity_short,
+}
+DEFAULT_TITLE_STRATEGY = "hook_curiosity_mix"
+
 
 def propose_titles(pipeline: BlogPipeline, keyword: str, reference: str = "",
                     extra: str = "", image_mode: str = "인포") -> dict:
@@ -22,14 +49,21 @@ def propose_titles(pipeline: BlogPipeline, keyword: str, reference: str = "",
     return turn1
 
 
-def select_title(pipeline: BlogPipeline, turn1: dict, auto: bool, title_index: int = None) -> int:
-    """제목 번호를 정한다. auto=True면 1번을 그대로 채택하고,
-    그렇지 않으면 사람이 번호를 고르거나 자유 텍스트로 재작업을 지시할 수 있다."""
+def select_title(pipeline: BlogPipeline, turn1: dict, auto: bool, title_index: int = None,
+                  title_strategy: str = DEFAULT_TITLE_STRATEGY) -> int:
+    """제목 번호를 정한다.
+
+    title_index가 있으면 그 번호를 그대로 쓴다. auto=True면 title_strategy에
+    따라 자동으로 고른다 — "hook_curiosity_mix"(기본값)는 후킹/클릭
+    유도형(6~10번)과 궁금증 폭발형(21~25번)을 섞어 그중 가장 짧은 제목을,
+    "first"는 예전처럼 SEO 최적화형 1번을 그대로 쓴다. auto가 아니면 사람이
+    번호를 고르거나 자유 텍스트로 재작업을 지시할 수 있다."""
     titles = turn1["titles"]
     if title_index:
         return title_index
     if auto:
-        return titles[0]["no"]
+        strategy_fn = TITLE_STRATEGIES.get(title_strategy, _choose_first)
+        return strategy_fn(titles)
 
     while True:
         print("\n" + pipeline.human_part())

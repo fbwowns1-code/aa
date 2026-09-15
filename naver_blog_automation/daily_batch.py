@@ -11,9 +11,10 @@ manager.assign_daily_batch()가 리서치팀부터 발행팀까지 순서대로 
 한 번씩 실행해주는 방식을 전제로 한다.
 
 무인 실행이 기본이다 — 밤 9시반에 사람이 붙어서 부서마다 확인해줄 수 없기
-때문에, 매니저가 각 부서에 자동 모드로 지시한다(제목 1번 자동 채택, 재작업
-지시 없음, 저장 전 확인 대기 없음). 결과는 전부 '임시저장'일 뿐 실제 발행은
-아니므로, 다음날 직접 검토 후 발행하는 것을 전제로 만들었다.
+때문에, 매니저가 각 부서에 자동 모드로 지시한다(제목은 --title-strategy
+대로 자동 채택, 재작업 지시 없음, 저장 전 확인 대기 없음). 결과는 전부
+'임시저장'일 뿐 실제 발행은 아니므로, 다음날 직접 검토 후 발행하는 것을
+전제로 만들었다.
 
 한 건이 실패하면 잠시 기다렸다가 재시도하고, 그래도 안 되거나(로그인 세션
 만료 등 재시도해도 똑같이 막힐 문제) 연속으로 여러 건이 실패하면 남은
@@ -50,6 +51,10 @@ def main():
     parser.add_argument("--prompt-path", default=None,
                          help="글쓰기 지침 파일 경로를 직접 지정한다. 생략하면 계정에 등록된 "
                               "지침 또는 .env의 기본 지침을 쓴다")
+    parser.add_argument("--title-strategy", default="hook_curiosity_mix",
+                         choices=["hook_curiosity_mix", "first"],
+                         help="제목 자동 채택 방식. hook_curiosity_mix(기본값)는 후킹/클릭 유도형+"
+                              "궁금증 폭발형 중 가장 짧은 제목, first는 SEO 최적화형 1번")
     parser.add_argument("--count", type=int, default=8, help="오늘 만들 포스트 개수 (기본 8개)")
     parser.add_argument("--out-dir", default="output", help="포스트별 이미지 저장 폴더의 상위 경로")
     parser.add_argument("--reports-dir", default="reports", help="뉴스 리포트 저장 폴더")
@@ -77,6 +82,7 @@ def main():
         blog_id=args.blog_id,
         account=args.account,
         prompt_path=args.prompt_path,
+        title_strategy=args.title_strategy,
         count=args.count,
         out_dir=args.out_dir,
         reports_dir=args.reports_dir,

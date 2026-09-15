@@ -168,7 +168,8 @@ async function runJob(mode) {
     showMsg(msgEl, "먼저 계정을 선택하거나 추가해주세요.", false);
     return;
   }
-  const payload = { mode, account };
+  const titleStrategy = document.getElementById("run-title-strategy").value;
+  const payload = { mode, account, title_strategy: titleStrategy };
   if (mode === "single") {
     payload.keyword = document.getElementById("run-keyword").value.trim();
     payload.reference = document.getElementById("run-reference").value;

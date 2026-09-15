@@ -59,6 +59,7 @@ def run_forever(
     reports_dir: str = "reports",
     headless: bool = True,
     infographic_via_chatgpt: bool = True,
+    title_strategy: str = "hook_curiosity_mix",
     max_retries: int = 1,
     retry_wait_seconds: int = 60,
     consecutive_failure_limit: int = 2,
@@ -79,8 +80,9 @@ def run_forever(
         print(f"[스케줄러] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — 오늘 배치를 시작합니다.")
         common_kwargs = dict(
             count=count, out_dir=out_dir, reports_dir=reports_dir, headless=headless,
-            infographic_via_chatgpt=infographic_via_chatgpt, max_retries=max_retries,
-            retry_wait_seconds=retry_wait_seconds, consecutive_failure_limit=consecutive_failure_limit,
+            infographic_via_chatgpt=infographic_via_chatgpt, title_strategy=title_strategy,
+            max_retries=max_retries, retry_wait_seconds=retry_wait_seconds,
+            consecutive_failure_limit=consecutive_failure_limit,
         )
         if accounts:
             for account in accounts:
@@ -110,6 +112,8 @@ def main():
                          help="브라우저 창을 띄워서 확인하고 싶을 때(테스트용)")
     parser.add_argument("--no-infographic-via-chatgpt", dest="infographic_via_chatgpt",
                          action="store_false", default=True)
+    parser.add_argument("--title-strategy", default="hook_curiosity_mix",
+                         choices=["hook_curiosity_mix", "first"])
     parser.add_argument("--max-retries", type=int, default=1)
     parser.add_argument("--retry-wait-seconds", type=int, default=60)
     parser.add_argument("--consecutive-failure-limit", type=int, default=2)
@@ -128,6 +132,7 @@ def main():
         reports_dir=args.reports_dir,
         headless=args.headless,
         infographic_via_chatgpt=args.infographic_via_chatgpt,
+        title_strategy=args.title_strategy,
         max_retries=args.max_retries,
         retry_wait_seconds=args.retry_wait_seconds,
         consecutive_failure_limit=args.consecutive_failure_limit,

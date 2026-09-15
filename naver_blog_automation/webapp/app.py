@@ -170,6 +170,8 @@ def run():
     if not account:
         return jsonify({"error": "계정을 선택해주세요."}), 400
 
+    title_strategy = data.get("title_strategy") or "hook_curiosity_mix"
+
     if mode == "single":
         keyword = (data.get("keyword") or "").strip()
         if not keyword:
@@ -181,6 +183,7 @@ def run():
             headless=True,
             pause_before_save=False,
             auto=True,
+            title_strategy=title_strategy,
         ))
     elif mode == "daily":
         count = int(data.get("count") or 8)
@@ -188,6 +191,7 @@ def run():
             account=account,
             count=count,
             headless=True,
+            title_strategy=title_strategy,
         ))
     else:
         return jsonify({"error": "mode는 'single' 또는 'daily'여야 합니다."}), 400

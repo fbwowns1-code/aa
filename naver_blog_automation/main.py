@@ -10,7 +10,13 @@
 기본 모드는 대화형이다 — 기획팀이 제목을 고르라고 물어보고, 작성팀·
 디자인팀도 결과물을 보여주며 수정할지 물어본다. 번호/Enter 대신 자유
 텍스트를 입력하면 재작업 지시로 그대로 전달된다. --auto를 주면 각 단계에서
-묻지 않고 기본값(1번 제목, 수정 없음)으로 끝까지 자동 진행한다.
+묻지 않고 기본값(제목은 --title-strategy대로 자동 선택, 수정 없음)으로
+끝까지 자동 진행한다.
+
+--auto일 때 기획팀이 제목을 어떻게 고를지는 --title-strategy로 정한다.
+기본값 "hook_curiosity_mix"는 후킹/클릭 유도형(6~10번)과 궁금증
+폭발형(21~25번)을 섞어서 그중 가장 짧은 제목을 고른다. "first"를 주면
+예전처럼 SEO 최적화형 1번을 그대로 쓴다.
 
 여러 네이버 계정(여러 블로그)을 운영한다면 --blog-id 대신 --account로
 accounts.json에 등록된 계정 이름을 주면 blog_id·로그인 세션·글쓰기 지침
@@ -41,6 +47,11 @@ def main():
     parser.add_argument("--extra", default="", help="처음부터 반영하고 싶은 추가 요청사항(선택)")
     parser.add_argument("--title-index", type=int, default=None,
                          help="선택할 제목 번호를 미리 고정한다(대화형 프롬프트 생략, --auto와 함께 쓸 때 유용)")
+    parser.add_argument("--title-strategy", default="hook_curiosity_mix",
+                         choices=["hook_curiosity_mix", "first"],
+                         help="--auto일 때 제목 자동 채택 방식. hook_curiosity_mix(기본값)는 "
+                              "후킹/클릭 유도형+궁금증 폭발형 중 가장 짧은 제목, "
+                              "first는 SEO 최적화형 1번")
     parser.add_argument("--blog-id", default=None, help="네이버 블로그 ID (blog.naver.com/아이디). --account를 쓰면 생략 가능")
     parser.add_argument("--account", default=None, help="accounts.json에 등록된 계정 이름 (여러 계정을 운영할 때)")
     parser.add_argument("--prompt-path", default=None,
@@ -70,6 +81,7 @@ def main():
         reference=args.reference,
         extra=args.extra,
         title_index=args.title_index,
+        title_strategy=args.title_strategy,
         out_dir=args.out_dir,
         headless=args.headless,
         pause_before_save=not args.no_pause,
