@@ -25,9 +25,10 @@
 import argparse
 from pathlib import Path
 
-from config import PROMPT_PATH
+from config import PROMPT_PATH, CHATGPT_SESSION_FILE
 from src.pipeline import BlogPipeline
 from src.image_gen import generate_images
+from src.chatgpt_image import generate_infographic_images_via_chatgpt
 from src.naver_poster import post_draft
 
 
@@ -35,28 +36,31 @@ def load_system_prompt() -> str:
     return Path(PROMPT_PATH).read_text(encoding="utf-8")
 
 
-def build_image_prompts(turn3: dict, image_mode: str) -> list:
+def build_realistic_prompts(turn3: dict, image_mode: str) -> list:
+    if image_mode not in ("실사", "둘다"):
+        return []
+    common = turn3.get("common_style_realistic", "")
+    return [
+        {
+            "subheading": item.get("subheading", ""),
+            "prompt": f"{common}\n{item.get('prompt', '')}".strip(),
+            "size": "1536x1024",
+        }
+        for item in turn3.get("realistic_prompts", [])
+    ]
+
+
+def build_infographic_prompts(turn3: dict, image_mode: str) -> list:
+    if image_mode not in ("인포", "둘다"):
+        return []
+    common = turn3.get("common_style_infographic", "")
     prompts = []
-
-    if image_mode in ("실사", "둘다"):
-        common = turn3.get("common_style_realistic", "")
-        for item in turn3.get("realistic_prompts", []):
-            prompts.append({
-                "subheading": item.get("subheading", ""),
-                "prompt": f"{common}\n{item.get('prompt', '')}".strip(),
-                "size": "1536x1024",
-            })
-
-    if image_mode in ("인포", "둘다"):
-        common = turn3.get("common_style_infographic", "")
-        for item in turn3.get("infographic_prompts", []):
-            subheading = "메인" if item.get("role") == "main" else item.get("subheading", "")
-            prompts.append({
-                "subheading": subheading,
-                "prompt": f"{common}\n{item.get('prompt', '')}".strip(),
-                "size": item.get("size", "1024x1024"),
-            })
-
+    for item in turn3.get("infographic_prompts", []):
+        subheading = "메인" if item.get("role") == "main" else item.get("subheading", "")
+        prompts.append({
+            "subheading": subheading,
+            "prompt": f"{common}\n{item.get('prompt', '')}".strip(),
+        })
     return prompts
 
 
@@ -130,6 +134,12 @@ def main():
                          help="임시저장 전 확인 절차를 건너뛴다 (처음 실행할 때는 권장하지 않음)")
     parser.add_argument("--auto", action="store_true",
                          help="턴마다 멈추지 않고 기본값으로 끝까지 자동 진행 (제목 1번 자동 선택, 수정 없음)")
+    parser.add_argument("--infographic-via-chatgpt", action="store_true", default=True,
+                         help="한글 인포그래픽 썸네일을 챗지피티 웹채팅으로 생성한다(기본값: 사용). "
+                              "끄려면 --no-infographic-via-chatgpt")
+    parser.add_argument("--no-infographic-via-chatgpt", dest="infographic_via_chatgpt",
+                         action="store_false",
+                         help="인포그래픽도 이미지 생성 API로 만든다(챗지피티 웹채팅 자동화 안 씀)")
     args = parser.parse_args()
 
     system_prompt = load_system_prompt()
@@ -156,8 +166,30 @@ def main():
     print("\n[3/4] 이미지 프롬프트 생성 및 이미지 제작 중...")
     turn3 = pipeline.run_turn3()
     turn3 = finalize_images(pipeline, turn3, args.auto)
-    image_prompts = build_image_prompts(turn3, args.image_mode)
-    generated = generate_images(image_prompts, args.out_dir)
+
+    realistic_prompts = build_realistic_prompts(turn3, args.image_mode)
+    infographic_prompts = build_infographic_prompts(turn3, args.image_mode)
+
+    generated = []
+    if realistic_prompts:
+        print(f"  실사 이미지 {len(realistic_prompts)}개는 이미지 생성 API로 제작합니다.")
+        generated += generate_images(realistic_prompts, args.out_dir)
+
+    if infographic_prompts:
+        if args.infographic_via_chatgpt:
+            if not Path(CHATGPT_SESSION_FILE).exists():
+                raise RuntimeError(
+                    f"챗지피티 세션 파일({CHATGPT_SESSION_FILE})이 없습니다. "
+                    "먼저 `python -m src.chatgpt_login`을 실행해서 로그인 세션을 저장하세요. "
+                    "또는 --no-infographic-via-chatgpt로 이미지 생성 API를 쓰세요."
+                )
+            print(f"  인포그래픽 썸네일 {len(infographic_prompts)}개는 챗지피티 웹채팅으로 제작합니다.")
+            generated += generate_infographic_images_via_chatgpt(
+                infographic_prompts, args.out_dir, CHATGPT_SESSION_FILE, headless=args.headless,
+            )
+        else:
+            print(f"  인포그래픽 썸네일 {len(infographic_prompts)}개는 이미지 생성 API로 제작합니다.")
+            generated += generate_images(infographic_prompts, args.out_dir, default_size="1024x1024")
 
     section_images = {}
     for img in generated:
