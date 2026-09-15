@@ -42,6 +42,21 @@ from pathlib import Path
 from typing import Optional
 
 ACCOUNTS_FILE = "accounts.json"
+SECRETS_DIR = Path("secrets")
+
+
+def _migrate_legacy_session_file(path: str) -> str:
+    """세션 파일을 secrets/ 밑에서만 관리하도록 강제한다. 예전 버전이
+    프로젝트 루트에 바로 저장했던 파일이 남아 있으면 자동으로 옮긴다."""
+    target = Path(path)
+    if target.exists():
+        return path
+    legacy = Path(target.name)
+    if legacy.exists() and legacy.resolve() != target.resolve():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        legacy.rename(target)
+        print(f"[core.accounts] 기존 세션 파일을 secrets/로 옮겼습니다: {legacy} → {target}")
+    return path
 
 
 def load_accounts(path: str = ACCOUNTS_FILE) -> dict:
@@ -62,27 +77,33 @@ def get_account(name: str, path: str = ACCOUNTS_FILE) -> dict:
 
 
 def naver_session_file_for(name: Optional[str], account: Optional[dict] = None) -> str:
-    """계정 이름에 맞는 네이버 세션 파일 경로를 돌려준다.
+    """계정 이름에 맞는 네이버 세션 파일 경로를 돌려준다. 세션 파일은
+    민감 정보(로그인 쿠키)이므로 항상 secrets/ 아래에서만 관리한다.
     account에 naver_session_file이 명시돼 있으면 그걸 쓰고, 없으면
-    naver_session_<계정이름>.json을 쓴다. 계정 이름 자체가 없으면(단일 계정
-    운영) .env의 기본 NAVER_SESSION_FILE을 쓴다."""
+    secrets/naver_session_<계정이름>.json을 쓴다. 계정 이름 자체가
+    없으면(단일 계정 운영) .env의 기본 NAVER_SESSION_FILE을 쓴다."""
     if account and account.get("naver_session_file"):
-        return account["naver_session_file"]
-    if name:
-        return f"naver_session_{name}.json"
-    from config import NAVER_SESSION_FILE
-    return NAVER_SESSION_FILE
+        path = account["naver_session_file"]
+    elif name:
+        path = str(SECRETS_DIR / f"naver_session_{name}.json")
+    else:
+        from config import NAVER_SESSION_FILE
+        path = NAVER_SESSION_FILE
+    return _migrate_legacy_session_file(path)
 
 
 def chatgpt_session_file_for(name: Optional[str], account: Optional[dict] = None) -> str:
     """디자인팀(챗지피티) 세션은 기본적으로 계정과 무관하게 공용
     CHATGPT_SESSION_FILE 하나를 쓴다 — 보통 네이버 블로그는 여러 개지만
     챗지피티 계정은 하나만 써도 되기 때문이다. account에
-    chatgpt_session_file이 따로 지정돼 있으면 그것을 우선한다."""
+    chatgpt_session_file이 따로 지정돼 있으면 그것을 우선한다. 세션 파일은
+    항상 secrets/ 아래에서만 관리한다."""
     if account and account.get("chatgpt_session_file"):
-        return account["chatgpt_session_file"]
-    from config import CHATGPT_SESSION_FILE
-    return CHATGPT_SESSION_FILE
+        path = account["chatgpt_session_file"]
+    else:
+        from config import CHATGPT_SESSION_FILE
+        path = CHATGPT_SESSION_FILE
+    return _migrate_legacy_session_file(path)
 
 
 def prompt_path_for(account: Optional[dict] = None) -> Optional[str]:

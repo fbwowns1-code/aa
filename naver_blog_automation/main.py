@@ -39,6 +39,7 @@ accounts.json에 등록된 계정 이름을 주면 blog_id·로그인 세션·�
 
 import argparse
 
+from core.database import STEP_NAMES
 from manager import assign_single_post
 
 
@@ -66,12 +67,18 @@ def main():
                          help="임시저장 전 확인 절차를 건너뛴다 (처음 실행할 때는 권장하지 않음)")
     parser.add_argument("--auto", action="store_true",
                          help="부서마다 묻지 않고 기본값으로 끝까지 자동 진행 (제목 1번 자동 선택, 수정 없음)")
-    parser.add_argument("--infographic-via-chatgpt", action="store_true", default=True,
-                         help="디자인팀이 인포그래픽을 챗지피티 웹채팅으로 만든다(기본값). "
-                              "끄려면 --no-infographic-via-chatgpt")
+    parser.add_argument("--infographic-via-chatgpt", action="store_true", default=None,
+                         help="디자인팀이 인포그래픽을 챗지피티 웹채팅(레거시)으로 만든다. "
+                              "생략하면 계정 설정(configs/accounts/<계정>.yaml의 images.provider) "
+                              "또는 기본값(OpenAI 이미지 생성 API)을 따른다.")
     parser.add_argument("--no-infographic-via-chatgpt", dest="infographic_via_chatgpt",
                          action="store_false",
-                         help="디자인팀이 인포그래픽을 이미지 생성 API로 만든다(챗지피티 자동화 안 씀)")
+                         help="디자인팀이 인포그래픽을 이미지 생성 API로 만든다(챗지피티 자동화 안 씀). "
+                              "기본 정책이라 보통 생략해도 된다.")
+    parser.add_argument("--force-step", default=None, choices=list(STEP_NAMES),
+                         help="이미 성공한 단계라도 강제로 다시 실행한다(예: IMAGE, NAVER_DRAFT). "
+                              "NAVER_DRAFT를 강제 지정하면 이미 임시저장된 글이라도 다시 저장한다"
+                              "(중복 방지 규칙의 유일한 예외).")
     args = parser.parse_args()
 
     if not args.blog_id and not args.account:
@@ -91,6 +98,7 @@ def main():
         auto=args.auto,
         infographic_via_chatgpt=args.infographic_via_chatgpt,
         prompt_path=args.prompt_path,
+        force_step=args.force_step,
     )
 
     print(f"\n[매니저] 대표님께 보고: '{result['title']}' 임시저장 완료 "

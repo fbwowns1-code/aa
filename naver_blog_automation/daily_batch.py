@@ -41,6 +41,7 @@ output/<날짜>/<account>/, reports/<account>/ 아래에 따로 쌓이므로, �
 
 import argparse
 
+from core.database import STEP_NAMES
 from manager import assign_daily_batch
 
 
@@ -64,17 +65,28 @@ def main():
                          help="브라우저 창 없이 실행 (배치는 기본값 사용을 권장 — 야간 무인 실행이므로)")
     parser.add_argument("--show-browser", dest="headless", action="store_false",
                          help="브라우저 창을 띄워서 확인하고 싶을 때(테스트용)")
+    parser.add_argument("--infographic-via-chatgpt", action="store_true", default=None,
+                         help="디자인팀이 인포그래픽을 챗지피티 웹채팅(레거시)으로 만든다. "
+                              "생략하면 계정 설정 또는 기본값(OpenAI 이미지 생성 API)을 따른다.")
     parser.add_argument("--no-infographic-via-chatgpt", dest="infographic_via_chatgpt",
-                         action="store_false", default=True,
-                         help="디자인팀이 인포그래픽을 이미지 생성 API로 만든다(챗지피티 자동화 안 씀)")
+                         action="store_false",
+                         help="디자인팀이 인포그래픽을 이미지 생성 API로 만든다(챗지피티 자동화 안 씀). "
+                              "기본 정책이라 보통 생략해도 된다.")
     parser.add_argument("--max-retries", type=int, default=1,
-                         help="한 건이 실패했을 때 재시도할 횟수 (기본 1회)")
+                         help="[더 이상 쓰이지 않음 — core/retry_policy.py의 오류 유형별 자동 재시도로 "
+                              "대체됨. 옛 CLI와의 호환을 위해서만 남겨둠] 한 건이 실패했을 때 재시도할 "
+                              "횟수 (기본 1회)")
     parser.add_argument("--retry-wait-seconds", type=int, default=60,
-                         help="재시도 전 대기 시간(초) (기본 60초)")
+                         help="[더 이상 쓰이지 않음 — 지수 백오프(5/15/45초)로 대체됨] "
+                              "재시도 전 대기 시간(초) (기본 60초)")
     parser.add_argument("--consecutive-failure-limit", type=int, default=2,
-                         help="이 횟수만큼 연속 실패하면 배치를 멈추고 대기한다 (기본 2)")
+                         help="[더 이상 쓰이지 않음 — 시스템적 오류(로그인 세션 만료 등)만 배치를 "
+                              "멈춘다] 이 횟수만큼 연속 실패하면 배치를 멈추고 대기한다 (기본 2)")
     parser.add_argument("--force-rerun", action="store_true",
                          help="중단된 배치가 있어도 무시하고 오늘 분량을 처음부터(새 리서치부터) 다시 돈다")
+    parser.add_argument("--force-step", default=None, choices=list(STEP_NAMES),
+                         help="이어서 진행되는 배치의 첫 건에 한해, 이미 성공한 단계라도 강제로 "
+                              "다시 실행한다(예: IMAGE, NAVER_DRAFT).")
     args = parser.parse_args()
 
     if not args.blog_id and not args.account:
@@ -94,6 +106,7 @@ def main():
         retry_wait_seconds=args.retry_wait_seconds,
         consecutive_failure_limit=args.consecutive_failure_limit,
         force_rerun=args.force_rerun,
+        force_step=args.force_step,
     )
 
 

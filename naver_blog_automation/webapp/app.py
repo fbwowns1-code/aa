@@ -1,15 +1,22 @@
 """
 네이버 블로그 자동화를 위한 로컬 웹 대시보드.
 
-계정 등록 → 지침 선택 → 실행을 한 화면에서 누르고, 부서별(리서치·기획·
-작성·디자인·발행) 진행 상황을 실시간으로 볼 수 있게 한다. 실제 업무
-배정은 여전히 manager.py가 한다 — 이 화면은 그걸 누르기 쉽게 감싼
-것뿐이다.
+계정 등록 → 지침 선택 → 실행을 한 화면에서 누르고, 오늘 배치의 진행 상황을
+automation.db(SQLite)에서 읽어 게시물별 9단계 상태로 실시간으로 볼 수 있게
+한다. 실제 업무 배정은 여전히 manager.py(→ core/job_manager.py)가 한다 —
+이 화면은 그걸 누르고 지켜보기 쉽게 감싼 것뿐이다.
 
 이 화면에서 누른 실행은 항상 완전 자동 모드로 돈다(제목 1번 자동 채택,
 수정 요청 없음, 저장 전 확인 대기 없음) — 웹 버튼에는 터미널 입력을 받을
 방법이 없기 때문이다. 턴마다 대화하면서 고치고 싶으면 터미널에서
 main.py를 직접 실행한다(README 참고).
+
+게시물이 특정 단계에서 실패/검토 필요 상태면 대시보드에서 "이 단계부터
+재시도" 버튼으로 core.job_manager.run_post_job을 force_step과 함께 다시
+부를 수 있다. NAVER_DRAFT 재시도도 마찬가지로 가능하지만, 이미 임시저장이
+완료된 글은 idempotency 규칙에 따라 NAVER_DRAFT를 명시적으로 재시도할
+때만(그 외 단계 재시도로 인한 자동 cascade 포함) 다시 저장된다 — 실수로
+중복 저장되지 않는다.
 
 실행 전 준비는 README와 동일하다(.env, 온보딩 등). 실행:
     python webapp/app.py
@@ -21,6 +28,7 @@ output/ 등 상대 경로가 맞게 잡힌다.
 import json
 import sys
 import threading
+from datetime import date, datetime
 from pathlib import Path
 
 # webapp/ 밑에서 실행해도 manager·core·departments·config를 그대로
@@ -30,14 +38,20 @@ sys.path.insert(0, str(ROOT_DIR))
 
 from flask import Flask, jsonify, render_template, request  # noqa: E402
 
-from core import status  # noqa: E402
+from core import database as db  # noqa: E402
 from core.accounts import load_accounts, ACCOUNTS_FILE  # noqa: E402
+from core.job_manager import run_post_job  # noqa: E402
+from core.logger import log_event  # noqa: E402
 from manager import assign_single_post, assign_daily_batch  # noqa: E402
 
 app = Flask(__name__)
 
 PROMPTS_DIR = ROOT_DIR / "prompts"
 ACCOUNTS_PATH = ROOT_DIR / ACCOUNTS_FILE
+
+# 스케줄러 하트비트(system_status.scheduler_last_seen)가 이보다 오래되면
+# "OFFLINE"으로 표시한다(scheduler.py는 20초 주기로 갱신한다).
+SCHEDULER_OFFLINE_THRESHOLD_SECONDS = 90
 
 _run_lock = threading.Lock()
 _is_running = False
@@ -150,10 +164,12 @@ def _run_in_background(fn, kwargs: dict) -> bool:
         try:
             fn(**kwargs)
         except Exception as e:
-            # 매니저가 이미 status.mark_failed를 호출했을 테지만, 예상 밖의
-            # 예외(예: 계정/파일 설정 오류로 매니저 진입 전에 터진 경우)도
-            # 대시보드에 보이게 한 번 더 남긴다.
-            status.mark_finished(error=str(e))
+            # 게시물/단계별 실패는 이미 automation.db(posts.status, errors
+            # 테이블)에 남아 대시보드가 그대로 보여준다. 여기서는 계정/파일
+            # 설정 오류처럼 job_manager 진입 전에 터진, DB에 남지 않는
+            # 예외만 평문 로그로 한 번 더 남긴다.
+            log_event(kwargs.get("account") or kwargs.get("account_id"),
+                       kwargs.get("post_id"), "WEBAPP_RUN", "ERROR", str(e))
         finally:
             with _run_lock:
                 _is_running = False
@@ -201,13 +217,116 @@ def run():
     return jsonify({"ok": True})
 
 
+def _scheduler_status() -> dict:
+    last_seen = db.get_system_status("scheduler_last_seen")
+    if not last_seen:
+        return {"last_seen": None, "online": False, "seconds_ago": None}
+    try:
+        seconds_ago = (datetime.now() - datetime.fromisoformat(last_seen)).total_seconds()
+    except ValueError:
+        return {"last_seen": last_seen, "online": False, "seconds_ago": None}
+    return {
+        "last_seen": last_seen,
+        "online": seconds_ago <= SCHEDULER_OFFLINE_THRESHOLD_SECONDS,
+        "seconds_ago": int(seconds_ago),
+    }
+
+
+def _post_with_steps(post: dict) -> dict:
+    steps_raw = db.get_steps(post["post_id"])
+    steps = {}
+    for name in db.STEP_NAMES:
+        row = steps_raw.get(name)
+        steps[name] = {
+            "status": row["status"] if row else "PENDING",
+            "attempt": row["attempt"] if row else 0,
+            "last_error": row["last_error"] if row else None,
+            "started_at": row["started_at"] if row else None,
+            "completed_at": row["completed_at"] if row else None,
+        }
+    return {
+        "post_id": post["post_id"],
+        "account_id": post["account_id"],
+        "topic": post.get("topic", ""),
+        "title": post.get("title", ""),
+        "status": post.get("status", "PENDING"),
+        "naver_draft_completed": bool(post.get("naver_draft_completed")),
+        "created_at": post.get("created_at"),
+        "updated_at": post.get("updated_at"),
+        "completed_at": post.get("completed_at"),
+        "steps": steps,
+    }
+
+
+def _summarize_posts(posts: list) -> dict:
+    return {
+        "total": len(posts),
+        "completed": sum(1 for p in posts if p["status"] == "COMPLETED"),
+        "in_progress": sum(1 for p in posts if p["status"] in ("PENDING", "RUNNING")),
+        "failed": sum(1 for p in posts if p["status"] == "FAILED"),
+        "review": sum(1 for p in posts if p["status"] in ("REVIEW", "DUPLICATE_WARNING")),
+    }
+
+
 @app.route("/api/status", methods=["GET"])
 def get_status():
-    s = status.read()
-    s["is_running"] = _is_running
-    s["department_labels"] = status.DEPARTMENT_LABELS
-    s["department_order"] = status.DEPARTMENT_ORDER
-    return jsonify(s)
+    """오늘(today) 배치의 전체/계정별/게시물별(9단계) 진행 상황을
+    automation.db에서 읽어 돌려준다. 예전에는 output/status.json 하나에
+    "지금 실행 중인 작업"만 보여줬지만, 이제는 여러 계정을 같은 날 각자
+    배치 돌려도 DB에 전부 남으므로 계정별로 묶어서 보여준다."""
+    today = date.today().strftime("%Y%m%d")
+    posts = [_post_with_steps(p) for p in db.list_posts(report_date=today)]
+
+    by_account: dict = {}
+    for p in posts:
+        by_account.setdefault(p["account_id"], []).append(p)
+
+    return jsonify({
+        "today": today,
+        "is_running": _is_running,
+        "scheduler": _scheduler_status(),
+        "summary": _summarize_posts(posts),
+        "step_names": list(db.STEP_NAMES),
+        "step_labels": db.STEP_LABELS,
+        "accounts": [
+            {"account_id": account_id, "summary": _summarize_posts(items), "posts": items}
+            for account_id, items in sorted(by_account.items())
+        ],
+    })
+
+
+@app.route("/api/retry", methods=["POST"])
+def retry():
+    """게시물 하나를 지정한 단계부터 강제로 다시 실행한다(그 단계와 그
+    이후 모든 단계가 PENDING으로 cascade 초기화된다 — core.database.reset_step).
+    NAVER_DRAFT는 이미 임시저장이 끝났어도 이 경로로 명시적으로 지정했을
+    때만 예외적으로 다시 저장된다(idempotency 규칙의 유일한 예외)."""
+    data = request.get_json(force=True) or {}
+    post_id = (data.get("post_id") or "").strip()
+    step = (data.get("step") or "").strip().upper()
+    if not post_id or not step:
+        return jsonify({"error": "post_id와 step을 모두 지정해주세요."}), 400
+    if step not in db.STEP_NAMES:
+        return jsonify({"error": f"알 수 없는 단계입니다: {step}"}), 400
+
+    post = db.get_post(post_id)
+    if not post:
+        return jsonify({"error": f"{post_id} 게시물을 찾을 수 없습니다."}), 404
+
+    account_id = post["account_id"]
+    accounts = load_accounts(str(ACCOUNTS_PATH))
+    account_info = accounts.get(account_id)
+    blog_id = (account_info or {}).get("blog_id") or account_id
+    keyword = post.get("topic") or post.get("title") or ""
+
+    started = _run_in_background(run_post_job, dict(
+        post_id=post_id, account_id=account_id, blog_id=blog_id, keyword=keyword,
+        account_info=account_info, headless=True, pause_before_save=False, auto=True,
+        force_step=step, is_batch_research=False,
+    ))
+    if not started:
+        return jsonify({"error": "이미 다른 작업이 진행 중입니다. 끝난 뒤 다시 시도해주세요."}), 409
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

@@ -33,6 +33,16 @@ class BlogPipeline:
         self.client = ConversationClient(system_prompt)
         self.current_raw = None  # 가장 최근 모델 응답 원문(사람이 읽는 부분 + JSON)
 
+    @classmethod
+    def resume(cls, system_prompt: str, previous_response_id: str, current_raw: str = "") -> "BlogPipeline":
+        """프로세스가 중간에 죽었다가 다시 시작할 때, 저장해둔
+        previous_response_id로 같은 OpenAI 대화를 이어서 쓴다 — F목록부터
+        다시 만들지 않아도 된다(대화 상태는 OpenAI 서버에 남아 있다)."""
+        pipeline = cls(system_prompt)
+        pipeline.client.previous_response_id = previous_response_id
+        pipeline.current_raw = current_raw
+        return pipeline
+
     def _send(self, message: str, use_web_search: bool = True) -> dict:
         self.current_raw = self.client.send(message, use_web_search=use_web_search)
         return _extract_automation_json(self.current_raw)

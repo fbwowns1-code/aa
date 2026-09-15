@@ -21,10 +21,27 @@ OS 수준 crontab/작업 스케줄러를 따로 설정하고 싶지 않을 때 �
 """
 
 import argparse
+import threading
 import time
 from datetime import datetime, timedelta
+from typing import Optional
 
+from core.database import STEP_NAMES, set_system_status
 from manager import assign_daily_batch
+
+HEARTBEAT_INTERVAL_SECONDS = 20
+
+
+def _heartbeat_loop(interval: int = HEARTBEAT_INTERVAL_SECONDS):
+    """스케줄러가 살아있는 동안(대기 중이든 배치 실행 중이든) 주기적으로
+    automation.db의 system_status에 마지막 생존 시각을 남긴다. 대시보드는
+    이 값이 오래됐으면(예: 90초 이상) OFFLINE으로 표시한다(PHASE 11)."""
+    while True:
+        try:
+            set_system_status("scheduler_last_seen", datetime.now().isoformat(timespec="seconds"))
+        except Exception as e:
+            print(f"[스케줄러] 하트비트 기록 실패(무시하고 계속): {e}")
+        time.sleep(interval)
 
 
 def _seconds_until(hour: int, minute: int) -> float:
@@ -58,11 +75,12 @@ def run_forever(
     out_dir: str = "output",
     reports_dir: str = "reports",
     headless: bool = True,
-    infographic_via_chatgpt: bool = True,
+    infographic_via_chatgpt: Optional[bool] = None,
     title_strategy: str = "ai_click_appeal",
     max_retries: int = 1,
     retry_wait_seconds: int = 60,
     consecutive_failure_limit: int = 2,
+    force_step: Optional[str] = None,
 ):
     """accounts가 주어지면(여러 계정 운영) 매일 같은 시각에 계정마다 순서대로
     하루 배치를 한 번씩 돌린다. accounts가 없으면 blog_id 하나로 기존처럼
@@ -70,6 +88,7 @@ def run_forever(
     who = f"{len(accounts)}개 계정({', '.join(accounts)})" if accounts else "단일 블로그"
     print(f"[스케줄러] 매일 {hour:02d}:{minute:02d}에 {who} 배치를 실행하도록 대기합니다. "
           "(Ctrl+C로 종료)")
+    threading.Thread(target=_heartbeat_loop, daemon=True).start()
     while True:
         wait_seconds = _seconds_until(hour, minute)
         next_run = datetime.now() + timedelta(seconds=wait_seconds)
@@ -82,7 +101,7 @@ def run_forever(
             count=count, out_dir=out_dir, reports_dir=reports_dir, headless=headless,
             infographic_via_chatgpt=infographic_via_chatgpt, title_strategy=title_strategy,
             max_retries=max_retries, retry_wait_seconds=retry_wait_seconds,
-            consecutive_failure_limit=consecutive_failure_limit,
+            consecutive_failure_limit=consecutive_failure_limit, force_step=force_step,
         )
         if accounts:
             for account in accounts:
@@ -110,13 +129,24 @@ def main():
     parser.add_argument("--headless", action="store_true", default=True)
     parser.add_argument("--show-browser", dest="headless", action="store_false",
                          help="브라우저 창을 띄워서 확인하고 싶을 때(테스트용)")
+    parser.add_argument("--infographic-via-chatgpt", action="store_true", default=None,
+                         help="디자인팀이 인포그래픽을 챗지피티 웹채팅(레거시)으로 만든다. "
+                              "생략하면 계정 설정 또는 기본값(OpenAI 이미지 생성 API)을 따른다.")
     parser.add_argument("--no-infographic-via-chatgpt", dest="infographic_via_chatgpt",
-                         action="store_false", default=True)
+                         action="store_false",
+                         help="디자인팀이 인포그래픽을 이미지 생성 API로 만든다. 기본 정책이라 "
+                              "보통 생략해도 된다.")
     parser.add_argument("--title-strategy", default="ai_click_appeal",
                          choices=["ai_click_appeal", "hook_curiosity_mix", "first"])
-    parser.add_argument("--max-retries", type=int, default=1)
-    parser.add_argument("--retry-wait-seconds", type=int, default=60)
-    parser.add_argument("--consecutive-failure-limit", type=int, default=2)
+    parser.add_argument("--max-retries", type=int, default=1,
+                         help="[더 이상 쓰이지 않음 — core/retry_policy.py로 대체됨]")
+    parser.add_argument("--retry-wait-seconds", type=int, default=60,
+                         help="[더 이상 쓰이지 않음 — 지수 백오프로 대체됨]")
+    parser.add_argument("--consecutive-failure-limit", type=int, default=2,
+                         help="[더 이상 쓰이지 않음 — 시스템적 오류만 배치를 멈춤]")
+    parser.add_argument("--force-step", default=None, choices=list(STEP_NAMES),
+                         help="매일 실행되는 배치가 이어서 진행할 첫 건에 한해, 이미 성공한 단계라도 "
+                              "강제로 다시 실행한다.")
     args = parser.parse_args()
 
     if not args.blog_id and not args.accounts:
@@ -136,6 +166,7 @@ def main():
         max_retries=args.max_retries,
         retry_wait_seconds=args.retry_wait_seconds,
         consecutive_failure_limit=args.consecutive_failure_limit,
+        force_step=args.force_step,
     )
 
 

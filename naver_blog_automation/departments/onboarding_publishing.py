@@ -24,10 +24,10 @@ accounts.json이 없거나 --account를 안 주면 기존처럼 완전히 수동
 """
 
 import argparse
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from config import NAVER_SESSION_FILE
 from core.accounts import get_account, naver_session_file_for
 
 
@@ -45,7 +45,7 @@ def main():
             print(f"[발행팀 출근 등록] {e}")
             return
 
-    session_file = naver_session_file_for(args.account, account) if args.account else NAVER_SESSION_FILE
+    session_file = naver_session_file_for(args.account, account)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -68,6 +68,7 @@ def main():
         print("로그인이 완료되면 이 터미널로 돌아와 Enter를 눌러주세요.")
         input()
 
+        Path(session_file).parent.mkdir(parents=True, exist_ok=True)
         context.storage_state(path=session_file)
         print(f"[발행팀 출근 등록] 완료. 세션을 저장했습니다: {session_file}")
         print("이 파일은 로그인 쿠키를 담고 있으므로 외부에 유출되지 않게 주의하세요.")

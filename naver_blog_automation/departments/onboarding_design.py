@@ -28,10 +28,11 @@ via_chatgpt=False로 일할 경우에는 필요 없다).
 """
 
 import argparse
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from config import CHATGPT_SESSION_FILE
+from core.accounts import chatgpt_session_file_for
 
 
 def main():
@@ -40,7 +41,11 @@ def main():
                          help="계정별로 다른 챗지피티 세션을 쓸 경우 구분용 이름")
     args = parser.parse_args()
 
-    session_file = f"chatgpt_session_{args.account}.json" if args.account else CHATGPT_SESSION_FILE
+    # 세션 파일은 항상 secrets/ 아래에서만 관리한다(민감 정보).
+    session_file = (
+        str(Path("secrets") / f"chatgpt_session_{args.account}.json")
+        if args.account else chatgpt_session_file_for(None)
+    )
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -52,6 +57,7 @@ def main():
         print("로그인이 완료되어 채팅 화면이 보이면 이 터미널로 돌아와 Enter를 눌러주세요.")
         input()
 
+        Path(session_file).parent.mkdir(parents=True, exist_ok=True)
         context.storage_state(path=session_file)
         print(f"[디자인팀 출근 등록] 완료. 세션을 저장했습니다: {session_file}")
         print("이 파일은 로그인 쿠키를 담고 있으므로 외부에 유출되지 않게 주의하세요.")

@@ -196,44 +196,132 @@ async function runJob(mode) {
 document.getElementById("btn-run-single").addEventListener("click", () => runJob("single"));
 document.getElementById("btn-run-daily").addEventListener("click", () => runJob("daily"));
 
-// ----- 상태 패널 -----
+// ----- 상태 패널 (automation.db 기반: 오늘 배치 전체/계정별/게시물별 9단계) -----
+
+const POST_STATUS_LABELS = {
+  PENDING: "대기", RUNNING: "진행중", COMPLETED: "완료", FAILED: "실패",
+  REVIEW: "검토 필요", DUPLICATE_WARNING: "중복 의심",
+};
+const STEP_STATUS_CLASS = {
+  PENDING: "step-pending", RUNNING: "step-running", SUCCESS: "step-success",
+  FAILED: "step-failed", RETRY: "step-retry", SKIPPED: "step-skipped",
+};
 
 function renderStatus(s) {
-  document.getElementById("status-label").textContent =
-    s.label ? s.label : "대기 중 (아직 실행한 작업 없음)";
+  const sum = s.summary || {};
+  document.getElementById("status-summary").textContent =
+    `전체 ${sum.total || 0}건 / 완료 ${sum.completed || 0}건 / 진행중 ${sum.in_progress || 0}건 / ` +
+    `실패 ${sum.failed || 0}건 / 검토 필요 ${sum.review || 0}건`;
 
-  const postEl = document.getElementById("status-post");
-  if (s.total_posts) {
-    postEl.textContent = `진행: ${s.current_post || 0} / ${s.total_posts}건` +
-      (s.running ? " · 실행 중" : s.finished ? " · 종료" : "");
+  const badge = document.getElementById("scheduler-badge");
+  const sched = s.scheduler || {};
+  if (!sched.last_seen) {
+    badge.textContent = "스케줄러: 기록 없음(단발/수동 실행만 했거나 scheduler.py 미실행)";
+    badge.className = "scheduler-badge unknown";
+  } else if (sched.online) {
+    badge.textContent = `스케줄러: 정상 · 마지막 응답 ${sched.seconds_ago}초 전`;
+    badge.className = "scheduler-badge online";
   } else {
-    postEl.textContent = "";
+    badge.textContent = `스케줄러: OFFLINE · 마지막 응답 ${sched.seconds_ago}초 전`;
+    badge.className = "scheduler-badge offline";
   }
 
-  const grid = document.getElementById("dept-grid");
-  grid.innerHTML = "";
-  const order = s.department_order || ["research", "planning", "writing", "design", "publishing"];
-  const labels = s.department_labels || {};
-  const departments = s.departments || {};
-  const details = s.detail || {};
-  for (const key of order) {
-    const state = departments[key] || "대기";
-    const card = document.createElement("div");
-    card.className = `dept-card state-${state}`;
-    card.innerHTML = `
-      <div class="dept-name">${labels[key] || key}</div>
-      <div class="dept-state">${state}</div>
-      <div class="dept-detail">${details[key] || ""}</div>
-    `;
-    grid.appendChild(card);
+  const container = document.getElementById("accounts-container");
+  container.innerHTML = "";
+  const accounts = s.accounts || [];
+  if (accounts.length === 0) {
+    container.innerHTML = '<p class="hint">오늘 아직 실행된 배치/단발 작업이 없습니다.</p>';
+    return;
   }
+  const stepNames = s.step_names || [];
+  const stepLabels = s.step_labels || {};
 
-  const errorEl = document.getElementById("status-error");
-  if (s.error) {
-    errorEl.hidden = false;
-    errorEl.textContent = "오류: " + s.error;
-  } else {
-    errorEl.hidden = true;
+  for (const acc of accounts) {
+    const asum = acc.summary || {};
+    const accDiv = document.createElement("div");
+    accDiv.className = "account-block";
+
+    const heading = document.createElement("h3");
+    heading.textContent = `${acc.account_id} — 완료 ${asum.completed || 0} / 전체 ${asum.total || 0}` +
+      ` (실패 ${asum.failed || 0}, 검토 필요 ${asum.review || 0})`;
+    accDiv.appendChild(heading);
+
+    const table = document.createElement("div");
+    table.className = "posts-table";
+
+    const header = document.createElement("div");
+    header.className = "posts-row posts-header";
+    header.innerHTML = `<div class="col-post">게시물</div>` +
+      stepNames.map((n) => `<div class="col-step">${stepLabels[n] || n}</div>`).join("");
+    table.appendChild(header);
+
+    for (const post of acc.posts) {
+      table.appendChild(_buildPostRow(post, stepNames, stepLabels));
+    }
+    accDiv.appendChild(table);
+    container.appendChild(accDiv);
+  }
+}
+
+function _buildPostRow(post, stepNames, stepLabels) {
+  const row = document.createElement("div");
+  row.className = "posts-row";
+
+  const postCell = document.createElement("div");
+  postCell.className = "col-post";
+  postCell.innerHTML = `
+    <div class="post-title">${post.title || post.topic || post.post_id}</div>
+    <div class="post-id">${post.post_id} · ${POST_STATUS_LABELS[post.status] || post.status}</div>
+  `;
+  row.appendChild(postCell);
+
+  const steps = post.steps || {};
+  for (const stepName of stepNames) {
+    const step = steps[stepName] || { status: "PENDING", attempt: 0 };
+    const cell = document.createElement("div");
+    cell.className = `col-step ${STEP_STATUS_CLASS[step.status] || ""}`;
+    if (step.last_error) cell.title = step.last_error;
+
+    const label = document.createElement("div");
+    label.className = "step-status";
+    label.textContent = step.status + (step.attempt > 1 ? ` (${step.attempt}회)` : "");
+    cell.appendChild(label);
+
+    const btn = document.createElement("button");
+    btn.className = "retry-btn";
+    btn.textContent = `${stepLabels[stepName] || stepName}부터 재시도`;
+    btn.addEventListener("click", () => retryStep(post.post_id, stepName, btn));
+    cell.appendChild(btn);
+
+    row.appendChild(cell);
+  }
+  return row;
+}
+
+async function retryStep(postId, step, btn) {
+  if (step === "NAVER_DRAFT") {
+    const ok = confirm(
+      `${postId}의 NAVER_DRAFT를 강제로 재시도합니다.\n` +
+      "이미 임시저장이 완료된 글이라도 다시 저장을 시도합니다(중복 방지 예외). 계속할까요?"
+    );
+    if (!ok) return;
+  }
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = "재시도 요청 중...";
+  try {
+    await api("/api/retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ post_id: postId, step }),
+    });
+    btn.textContent = "재시도 시작됨";
+  } catch (e) {
+    btn.textContent = "실패: " + e.message;
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.disabled = false;
+    }, 3000);
   }
 }
 

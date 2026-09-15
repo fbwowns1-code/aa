@@ -6,7 +6,7 @@
 최종 검토·발행은 대표(사용자)가 직접 한다.
 """
 
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from core.naver_poster import post_draft
 
@@ -20,11 +20,17 @@ def publish_draft(
     headless: bool = False,
     pause_before_save: bool = True,
     session_file: Optional[str] = None,
+    on_save_clicked: Optional[Callable[[], None]] = None,
+    post_id: Optional[str] = None,
+    account_id: Optional[str] = None,
 ) -> None:
     """디자인팀이 만든 이미지를 소제목별로 배치해 네이버 블로그에 임시저장한다.
 
     session_file: 여러 계정을 운영할 때 그 계정의 로그인 세션 파일 경로.
     생략하면 .env의 기본 NAVER_SESSION_FILE(단일 계정)을 쓴다.
+    on_save_clicked: 임시저장 버튼 클릭 직후 호출되는 콜백(중복 저장
+    방지 idempotency 플래그를 세우는 용도, job_manager가 넘겨준다).
+    post_id/account_id: 로그·오류 스크린샷 파일명에 쓰인다(생략 가능).
     """
     images = images or []
     section_images = {}
@@ -41,5 +47,8 @@ def publish_draft(
         headless=headless,
         pause_before_save=pause_before_save,
         session_file=session_file,
+        on_save_clicked=on_save_clicked,
+        post_id=post_id,
+        account_id=account_id,
     )
     print("[발행팀] 임시저장을 완료했습니다. 최종 검토·발행은 직접 해주세요.")

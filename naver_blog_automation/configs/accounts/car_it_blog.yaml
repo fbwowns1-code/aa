@@ -1,0 +1,38 @@
+# configs/accounts/<계정이름>.yaml 템플릿.
+# 이 파일 자체는 코드에서 읽지 않는다 — 복사해서 실제 계정 이름으로
+# 저장한 뒤 값을 바꿔 쓴다(예: configs/accounts/car_it_blog.yaml).
+# 값을 생략한 항목은 core/account_config.py의 DEFAULTS로 채워진다.
+
+blog:
+  id: car_it_blog
+  category: 자동차
+
+writing:
+  min_chars: 2500
+  max_chars: 4000
+  headings: 6
+  tone: professional_editorial
+
+title:
+  candidate_count: 15
+  categories:
+    - curiosity      # 호기심형
+    - comparison      # 비교형
+    - number          # 숫자 강조형
+    - information      # 정보형
+    - reversal         # 반전형
+
+images:
+  count: 6
+  ratio: "1:1"
+  provider: openai_api
+
+publishing:
+  mode: draft
+
+retry:
+  max_attempts: 3
+
+quality_gate:
+  pass_score: 85
+  review_score: 70

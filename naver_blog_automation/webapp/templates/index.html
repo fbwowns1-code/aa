@@ -9,11 +9,12 @@
   <h1>네이버 블로그 자동화 제어판</h1>
 
   <section id="status-panel" class="panel">
-    <h2>부서별 진행 현황</h2>
-    <div id="status-label" class="status-label">대기 중</div>
-    <div id="status-post" class="status-post"></div>
-    <div id="dept-grid" class="dept-grid"></div>
-    <div id="status-error" class="status-error" hidden></div>
+    <h2>오늘 진행 현황</h2>
+    <div class="status-toprow">
+      <div id="status-summary" class="status-summary"></div>
+      <div id="scheduler-badge" class="scheduler-badge">스케줄러 확인 중...</div>
+    </div>
+    <div id="accounts-container"></div>
   </section>
 
   <div class="column">
