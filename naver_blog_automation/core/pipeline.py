@@ -1,7 +1,7 @@
 import json
 import re
 
-from src.openai_client import ConversationClient
+from core.openai_client import ConversationClient
 
 AUTOMATION_MARKER = "---AUTOMATION-JSON---"
 

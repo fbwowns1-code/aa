@@ -1,13 +1,13 @@
 """
-국내 자동차 업계(현대차·기아·제네시스·KG모빌리티·르노코리아·수입차 브랜드 등)의
-화제 소식·이슈를 웹에서 조사해 리포트로 만들고, 그중 오늘 블로그 글감으로 쓸
-항목을 선정하는 모듈.
+리서치팀 — 국내 자동차 업계(현대차·기아·제네시스·KG모빌리티·르노코리아·
+수입차 브랜드 등) 화제 뉴스를 웹에서 조사해 리포트로 만들고, 오늘 블로그
+글감으로 쓸 항목을 골라 기획팀에 넘길 준비를 한다.
 
-daily_batch.py가 매일 이 모듈을 먼저 돌려서 나온 selected_topics를
-src/post_runner.py의 run_single_post(keyword=..., reference=...)에 그대로
-넣는다 — keyword/reference 조합은 원래 지침(prompts/system_prompt.txt)의
-"제목+본문 참고형" 입력 방식과 같다(참고 본문은 팩트 소스로만 쓰이고,
-본문 자체는 다시 F목록 검증을 거친다).
+담당 업무: 시장 조사. 로그인이 필요 없고 OPENAI_API_KEY만 있으면 일한다.
+결과물(keyword + reference)은 매니저가 기획팀(departments.planning)에
+그대로 넘긴다 — reference는 지침 원문의 "제목+본문 참고형" 입력에서 쓰는
+참고 본문과 같은 역할이며, 팩트 소스로만 쓰이고 작성팀이 다시 F목록·
+팩트체크를 거친다.
 """
 
 import json
@@ -20,7 +20,7 @@ from openai import OpenAI
 
 from config import OPENAI_MODEL, OPENAI_WEB_SEARCH_TOOL
 
-RESEARCH_INSTRUCTIONS = """당신은 국내 자동차 업계 뉴스 리서치 에이전트다.
+BRIEFING = """당신은 국내 자동차 업계 뉴스 리서치 에이전트다.
 
 웹 검색으로 오늘(또는 최근 24~48시간 이내)의 현대차·기아·제네시스·
 KG모빌리티·르노코리아·수입차 브랜드(BMW, 벤츠, 테슬라, 아우디, 폭스바겐,
@@ -71,7 +71,7 @@ selected_topics에 고른다. 기준: 화제성·검색 수요가 있을 것, �
 def _extract_json(text: str) -> dict:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("리서치 응답에서 JSON을 찾지 못했습니다:\n" + text[:2000])
+        raise ValueError("리서치팀 응답에서 JSON을 찾지 못했습니다:\n" + text[:2000])
     return json.loads(match.group(0))
 
 
@@ -92,13 +92,17 @@ def _to_markdown(report: dict) -> str:
     return "\n".join(lines)
 
 
-def research_daily_news(save_dir: str = "reports", api_key: str = None) -> dict:
+def investigate(save_dir: str = "reports", api_key: str = None) -> dict:
     """오늘의 국내 자동차 업계 뉴스를 조사해서 report(dict)로 돌려주고,
-    JSON·Markdown 파일로도 save_dir에 저장한다."""
+    JSON·Markdown 리포트 파일로도 save_dir에 저장한다.
+
+    반환값의 report["selected_topics"]가 기획팀에 넘길 오늘의 글감 목록이다.
+    """
+    print("[리서치팀] 국내 자동차 업계 화제 뉴스를 조사합니다...")
     client = OpenAI(api_key=api_key or os.environ["OPENAI_API_KEY"])
     response = client.responses.create(
         model=OPENAI_MODEL,
-        instructions=RESEARCH_INSTRUCTIONS,
+        instructions=BRIEFING,
         input="오늘 기준으로 국내 자동차 업계 화제 뉴스를 조사해줘.",
         tools=[{"type": OPENAI_WEB_SEARCH_TOOL}],
     )
@@ -111,11 +115,12 @@ def research_daily_news(save_dir: str = "reports", api_key: str = None) -> dict:
     )
     (Path(save_dir) / f"{report_date}.md").write_text(_to_markdown(report), encoding="utf-8")
 
+    print(f"[리서치팀] 보고 완료 — 조사 {len(report.get('items', []))}건, "
+          f"글감 선정 {len(report.get('selected_topics', []))}건 "
+          f"(리포트: {save_dir}/{report_date}.md)")
     return report
 
 
 if __name__ == "__main__":
-    # 단독 실행하면 리포트만 만들고 파이프라인은 돌리지 않는다.
-    r = research_daily_news()
-    print(f"리포트 생성 완료: report_date={r.get('report_date')}, "
-          f"항목 {len(r.get('items', []))}개, 선정 {len(r.get('selected_topics', []))}개")
+    # 리서치팀 단독 출근 — 오늘 리포트만 만들고 다른 부서는 부르지 않는다.
+    investigate()

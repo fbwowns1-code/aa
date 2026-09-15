@@ -1,20 +1,22 @@
 """
-네이버 블로그 포스팅 자동화 — 단발 실행용 CLI.
+네이버 블로그 포스팅 자동화 — 단발 지시용 CLI.
 
-글 한 편을 처음부터 끝까지(제목→본문→인포그래픽 이미지→네이버 임시저장)
-만든다. 여러 편을 매일 자동으로 돌리고 싶으면 daily_batch.py를 쓴다.
+대표(사용자)가 매니저에게 "이 키워드로 글 한 편 만들어서 임시저장까지 해줘"
+라고 지시하는 창구다. 실제 업무 배정은 manager.py가 부서별로 처리한다
+(리서치팀·기획팀·작성팀·디자인팀·발행팀 — README의 조직도 참고).
 
-기본 모드는 대화형이다 — 지침 원문에 있는 "제목 번호를 골라달라"와
-"수정할 곳이 있으면 말해달라" 지점에서 실제로 멈춰서 입력을 기다리고,
-번호/Enter 대신 자유 텍스트를 입력하면 그걸 수정 요청으로 모델에 보낸다.
---auto를 주면 각 단계에서 묻지 않고 기본값(1번 제목, 수정 없음)으로
-끝까지 자동 진행한다.
+여러 편을 매일 자동으로 돌리고 싶으면 daily_batch.py를 쓴다.
+
+기본 모드는 대화형이다 — 기획팀이 제목을 고르라고 물어보고, 작성팀·
+디자인팀도 결과물을 보여주며 수정할지 물어본다. 번호/Enter 대신 자유
+텍스트를 입력하면 재작업 지시로 그대로 전달된다. --auto를 주면 각 단계에서
+묻지 않고 기본값(1번 제목, 수정 없음)으로 끝까지 자동 진행한다.
 
 사용 전 준비:
   1) pip install -r requirements.txt && playwright install chromium
   2) .env.example을 .env로 복사하고 OPENAI_API_KEY 입력
-  3) python -m src.naver_login  (최초 1회, 네이버 로그인 세션 저장)
-  4) python -m src.chatgpt_login  (최초 1회, 인포그래픽을 챗지피티 웹채팅으로 만들 경우)
+  3) python -m departments.onboarding_publishing  (최초 1회, 네이버 로그인 세션 저장)
+  4) python -m departments.onboarding_design       (최초 1회, 인포그래픽을 챗지피티로 만들 경우)
 
 예시:
   python main.py --keyword "쏘렌토 풀체인지 MQ5" --blog-id myblogid
@@ -22,7 +24,7 @@
 
 import argparse
 
-from src.post_runner import run_single_post
+from manager import assign_single_post
 
 
 def main():
@@ -38,16 +40,16 @@ def main():
     parser.add_argument("--no-pause", action="store_true",
                          help="임시저장 전 확인 절차를 건너뛴다 (처음 실행할 때는 권장하지 않음)")
     parser.add_argument("--auto", action="store_true",
-                         help="턴마다 멈추지 않고 기본값으로 끝까지 자동 진행 (제목 1번 자동 선택, 수정 없음)")
+                         help="부서마다 묻지 않고 기본값으로 끝까지 자동 진행 (제목 1번 자동 선택, 수정 없음)")
     parser.add_argument("--infographic-via-chatgpt", action="store_true", default=True,
-                         help="한글 인포그래픽 썸네일을 챗지피티 웹채팅으로 생성한다(기본값: 사용). "
+                         help="디자인팀이 인포그래픽을 챗지피티 웹채팅으로 만든다(기본값). "
                               "끄려면 --no-infographic-via-chatgpt")
     parser.add_argument("--no-infographic-via-chatgpt", dest="infographic_via_chatgpt",
                          action="store_false",
-                         help="인포그래픽도 이미지 생성 API로 만든다(챗지피티 웹채팅 자동화 안 씀)")
+                         help="디자인팀이 인포그래픽을 이미지 생성 API로 만든다(챗지피티 자동화 안 씀)")
     args = parser.parse_args()
 
-    result = run_single_post(
+    result = assign_single_post(
         keyword=args.keyword,
         blog_id=args.blog_id,
         reference=args.reference,
@@ -60,7 +62,8 @@ def main():
         infographic_via_chatgpt=args.infographic_via_chatgpt,
     )
 
-    print(f"\n완료: {result['title']} (이미지 {result['image_count']}장, 글자수 {result['char_count']})")
+    print(f"\n[매니저] 대표님께 보고: '{result['title']}' 임시저장 완료 "
+          f"(이미지 {result['image_count']}장, 글자수 {result['char_count']}).")
 
 
 if __name__ == "__main__":
