@@ -1,0 +1,5 @@
+.env
+naver_session.json
+output/
+__pycache__/
+*.pyc
