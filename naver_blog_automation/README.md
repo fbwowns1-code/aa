@@ -66,6 +66,49 @@ python -m departments.onboarding_design
 
 브라우저가 뜨면 챗지피티에 직접 로그인 → 터미널로 돌아와 Enter → `chatgpt_session.json` 저장 완료. 이 계정은 GPT API 키와는 별개로, 실제 챗지피티 로그인 계정(무료든 Plus든)이어야 한다.
 
+## 여러 네이버 계정(블로그) 운영하기
+
+블로그를 하나만 운영한다면 이 섹션은 건너뛰어도 된다(`--blog-id` + 기본 세션 파일로 그대로 동작).
+
+여러 계정을 운영한다면 `accounts.example.json`을 복사해서 `accounts.json`을 만든다(이 파일은 `.gitignore`에 들어 있어 커밋되지 않는다).
+
+```bash
+cp accounts.example.json accounts.json
+```
+
+```json
+{
+  "car_blog": {
+    "blog_id": "myblogid1",
+    "naver_id": "naver_login_id_1",
+    "naver_pw": "naver_login_password_1"
+  },
+  "it_blog": {
+    "blog_id": "myblogid2",
+    "naver_id": "naver_login_id_2",
+    "naver_pw": "naver_login_password_2"
+  }
+}
+```
+
+그리고 계정별로 출근 등록을 한다 — `naver_id`/`naver_pw`를 적어두면 로그인 페이지에 아이디·비밀번호를 자동으로 입력해준다(보안문자·2단계 인증은 직접 처리하고 로그인 버튼도 직접 눌러야 한다. 자동 제출은 하지 않는다):
+
+```bash
+python -m departments.onboarding_publishing --account car_blog
+python -m departments.onboarding_publishing --account it_blog
+```
+
+각 계정의 세션은 `naver_session_<계정이름>.json`으로 따로 저장된다. 이후 모든 명령에서 `--blog-id` 대신 `--account`를 쓰면 된다:
+
+```bash
+python main.py --keyword "..." --account car_blog
+python daily_batch.py --account it_blog
+```
+
+`daily_batch.py`를 계정별로 따로 실행해도 서로 덮어쓰지 않는다 — 리포트는 `reports/<계정이름>/`, 진행 상태·이미지는 `output/<날짜>/<계정이름>/`에 나뉘어 저장된다. 챗지피티(디자인팀) 로그인은 보통 계정과 무관하게 공용 세션 하나(`chatgpt_session.json`)를 여러 네이버 계정이 같이 써도 되며, 꼭 따로 쓰고 싶다면 `accounts.json`의 해당 계정에 `"chatgpt_session_file": "chatgpt_session_car_blog.json"`처럼 직접 지정하면 된다.
+
+**보안 참고**: `naver_id`/`naver_pw`는 로그인 페이지에 자동으로 타이핑해주는 용도로만 쓰이고 이 코드가 다른 곳으로 전송하지 않는다. 그래도 평문으로 저장되는 파일이니 `accounts.json`을 외부에 공유하거나 git에 올리지 않도록 주의한다.
+
 ## 지시 방법 1: 단발 지시 (main.py)
 
 ```bash
@@ -86,7 +129,8 @@ python main.py --keyword "쏘렌토 풀체인지 MQ5" --blog-id 내블로그아�
 | `--reference` | 참고 본문(기사·타 블로그 등, 팩트 소스로만 사용됨) |
 | `--extra` | 시작할 때부터 반영하고 싶은 요청사항(예: `"경쟁사 A 모델은 언급하지 말아줘"`) |
 | `--title-index` | 제목 번호를 미리 고정해서 대화형 프롬프트 자체를 생략한다 |
-| `--blog-id` | `blog.naver.com/이 부분` |
+| `--blog-id` | `blog.naver.com/이 부분`. 여러 계정을 운영한다면 이 대신 `--account` |
+| `--account` | `accounts.json`에 등록된 계정 이름 (여러 계정 운영 시) |
 | `--headless` | 브라우저 창 없이 실행 (처음에는 끄고 눈으로 확인하는 것을 권장) |
 | `--no-pause` | 임시저장 직전 확인 절차 생략 (처음 실행할 때는 권장하지 않음) |
 | `--auto` | 부서마다 묻지 않고 기본값(제목 1번, 수정 없음)으로 끝까지 자동 진행 |
@@ -109,24 +153,58 @@ python daily_batch.py --blog-id 내블로그아이디
 1. **리서치팀**(`departments/research.py`)이 GPT + 웹 검색으로 오늘/최근 뉴스를 조사해 `reports/YYYY-MM-DD.json`(구조화 데이터)과 `reports/YYYY-MM-DD.md`(발행일·핵심 내용·출처 링크가 정리된 리포트)를 만든다. 브랜드가 겹치지 않도록 8개를 골라 각 항목에 `keyword`(제목 후보)와 `reference`(요약+출처)를 붙인다.
 2. 그 8개를 하나씩 매니저가 `assign_single_post(keyword=..., reference=...)`로 나머지 부서(기획→작성→디자인→발행)에 넘긴다. `keyword`+`reference` 조합은 지침 원문의 "제목+본문 참고형" 입력과 같은 방식이다 — reference는 팩트 소스로만 쓰이고, 본문 자체는 작성팀이 F목록·팩트체크를 그대로 다시 거친다.
 3. 배치는 **완전 무인**으로 돈다(기획팀 1번 제목 자동 채택, 재작업 지시 없음, 저장 전 확인 대기 없음) — 밤에 사람이 붙어있지 않기 때문이다. 결과는 전부 **임시저장**이며 실제 발행은 하지 않으니, 다음날 아침에 직접 검토 후 발행한다.
-4. 한 건이 실패해도(선택자 불일치, 이미지 생성 실패 등) 매니저가 나머지는 계속 진행시키고, 마지막에 `output/YYYY-MM-DD/batch_summary.json`에 성공/실패 요약을 남긴다.
+4. 진행 상황은 매 건마다 `output/YYYY-MM-DD/batch_state.json`에 저장한다. 자세한 실패 처리·대기 동작은 아래 "실패하면 멈추고 대기하기" 참고.
 
 주요 옵션:
 
 | 옵션 | 설명 |
 |---|---|
+| `--blog-id` / `--account` | 단발 지시와 동일 — 여러 계정을 운영한다면 `--account` |
 | `--count` | 오늘 만들 포스트 개수 (기본 8개) |
 | `--reports-dir` | 뉴스 리포트 저장 폴더 (기본 `reports`) |
 | `--show-browser` | 브라우저 창을 띄워서 확인 (테스트용, 기본은 headless) |
 | `--no-infographic-via-chatgpt` | 디자인팀이 인포그래픽을 이미지 생성 API로 만든다 |
+| `--max-retries` | 한 건이 실패했을 때 재시도할 횟수 (기본 1회) |
+| `--retry-wait-seconds` | 재시도 전 대기 시간(초) (기본 60초) |
+| `--consecutive-failure-limit` | 이 횟수만큼 연속 실패하면 배치를 멈추고 대기 (기본 2) |
+| `--force-rerun` | 중단된 배치를 무시하고 오늘 분량을 새 리서치부터 처음부터 다시 돈다 |
 
-**사전 준비**: 위의 "부서별 출근 등록"(발행팀·디자인팀)을 미리 마쳐둬야 한다. 야간 무인 실행 중에는 로그인 화면이 떠도 아무도 로그인해줄 수 없으므로, 세션이 만료되면 그날 배치가 통째로 실패한다 — 정기적으로(예: 2주에 한 번) 두 온보딩 스크립트를 다시 돌려서 세션을 갱신하는 걸 권장한다.
+**사전 준비**: 위의 "부서별 출근 등록"(발행팀·디자인팀)을 미리 마쳐둬야 한다. 야간 무인 실행 중에는 로그인 화면이 떠도 아무도 로그인해줄 수 없으므로, 세션이 만료되면 그날 배치가 멈춘다(아래 참고) — 정기적으로(예: 2주에 한 번) 두 온보딩 스크립트를 다시 돌려서 세션을 갱신하는 걸 권장한다.
 
-### 매일 21:30에 자동 실행되게 예약하기
+### 실패하면 멈추고 대기하기
 
-`daily_batch.py`는 한 번 실행하면 그날 배치를 끝내고 종료하는 스크립트다. 상주시켜두는 게 아니라, OS 스케줄러가 매일 정해진 시각에 한 번씩 실행해주는 방식을 쓴다.
+야간 무인 실행 중 예상치 못한 변수(네트워크 순단, API 일시 오류, 로그인 세션 만료, 네이버·챗지피티 UI 구조 변경 등)로 한 건이 실패할 수 있다. 매니저(`manager.assign_daily_batch`)는 이렇게 처리한다.
 
-**Linux/Mac (crontab)**
+1. **재시도**: 한 건이 실패하면 `--retry-wait-seconds`(기본 60초)만큼 기다렸다가 `--max-retries`(기본 1회)만큼 다시 시도한다 — 일시적인 변수라면 이 단계에서 회복된다.
+2. **멈추고 대기**: 그래도 실패했는데,
+   - 오류 메시지에 로그인 세션 만료·온보딩 필요·선택자 불일치·API 키 오류 같은 "재시도해도 똑같이 막힐" 단서가 보이면(치명적 오류로 판단), 또는
+   - `--consecutive-failure-limit`(기본 2)번 연속으로 실패하면
+
+   남은 글감을 억지로 더 실패시키지 않고 **배치를 즉시 멈춘다.** `batch_state.json`에 `"paused": true`와 `paused_reason`을 남기고, 콘솔에도 중단 사유를 출력한다.
+3. **이어서 진행(재개)**: 문제를 해결한 뒤(대개 온보딩 스크립트로 재로그인) 같은 명령(`python daily_batch.py --blog-id ...`)을 다시 실행하면, 새로 리서치를 돌리지 않고 **멈췄던 글감부터** 이어서 진행한다. 오늘 배치가 이미 끝까지 완료돼 있으면 아무 일도 하지 않고 그대로 기존 결과를 보여준다. 처음부터 다시 돌리고 싶으면 `--force-rerun`을 준다.
+
+`batch_state.json`을 보면 지금까지의 진행 상황을 바로 확인할 수 있다(`"paused"`, `"paused_reason"`, 건별 `"status"`).
+
+### 매일 자동 실행되게 만들기
+
+두 가지 방법이 있다. 컴퓨터를 24시간 켜두지 않고 가끔만 켠다면 OS 스케줄러가 편하고, 컴퓨터를 계속 켜둔다면 `scheduler.py`를 실행해두는 쪽이 설정이 더 간단하다.
+
+**방법 A. 상주 스케줄러 (`scheduler.py`)** — OS 설정이 필요 없다. 이 스크립트를 한 번 실행해서 계속 켜두면, 매일 지정된 시각(기본 21:30)에 자동으로 `manager.assign_daily_batch()`를 호출한다.
+
+```bash
+# 터미널에 계속 띄워두거나, Linux/Mac이면 nohup으로 백그라운드 실행
+nohup python scheduler.py --blog-id 내블로그아이디 > logs/scheduler.log 2>&1 &
+
+# 여러 계정을 운영한다면 --account를 여러 번 줄 수 있다 — 매일 같은 시각에
+# 계정마다 순서대로 한 번씩 배치를 돌린다
+nohup python scheduler.py --account car_blog --account it_blog > logs/scheduler.log 2>&1 &
+```
+
+컴퓨터를 끄거나 이 프로세스가 죽으면 그날 배치는 건너뛰게 된다는 점을 기억해야 한다. 배치가 중단(`paused`)된 채로 끝나도 스케줄러 자체는 죽지 않고 다음날 같은 시각에 다시 시도한다 — 단, 원인(예: 로그인 세션 만료)이 해결되지 않으면 또 같은 이유로 멈출 수 있으니 로그를 가끔 확인한다.
+
+**방법 B. OS 스케줄러 (crontab / 작업 스케줄러)** — `scheduler.py`를 계속 켜둘 필요 없이, OS가 매일 정해진 시각에 `daily_batch.py`를 한 번씩 실행해준다.
+
+Linux/Mac (crontab):
 
 ```bash
 crontab -e
@@ -140,21 +218,22 @@ crontab -e
 
 (로그를 남기려면 `mkdir -p logs`로 폴더를 미리 만들어둔다.)
 
-**Windows (작업 스케줄러)**
+Windows (작업 스케줄러):
 
 1. "작업 스케줄러" 실행 → "기본 작업 만들기"
 2. 트리거: 매일, 오후 9:30
 3. 동작: 프로그램 시작 → 프로그램/스크립트에 `python.exe` 경로, 인수에 `daily_batch.py --blog-id 내블로그아이디`, 시작 위치에 `naver_blog_automation` 폴더 경로 입력
 
-두 방식 모두 컴퓨터가 그 시각에 켜져 있어야 동작한다는 점, 그리고 위의 로그인 세션이 만료되지 않아야 한다는 점을 기억해야 한다.
+두 방법 모두 컴퓨터가 그 시각에 켜져 있어야 동작한다는 점, 그리고 로그인 세션이 만료되지 않아야 한다는 점을 기억해야 한다. 배치가 중단된 채 끝났다면 로그(`logs/daily.log` 또는 `logs/scheduler.log`)나 `batch_state.json`의 `paused_reason`으로 원인을 확인하고, 해결한 뒤에는 아무것도 더 할 필요 없이 다음 예정 실행(또는 수동 재실행)에서 자동으로 이어서 진행된다.
 
 ## 폴더 구조
 
 ```
 naver_blog_automation/
   main.py                          단발 지시 CLI
-  daily_batch.py                   하루 배치 지시 CLI
-  manager.py                       총괄 매니저 (부서 배정·보고 취합)
+  daily_batch.py                   하루 배치 지시 CLI (한 번 실행하고 종료)
+  scheduler.py                     상주 스케줄러 (매일 지정 시각에 daily_batch 역할 자동 실행)
+  manager.py                       총괄 매니저 (부서 배정·보고 취합·재시도·중단 대기)
   config.py                        환경변수 로드
   departments/                     다섯 부서
     research.py                     리서치팀 (뉴스 조사)
@@ -170,10 +249,12 @@ naver_blog_automation/
     image_gen.py                    OpenAI 이미지 생성 API 호출
     chatgpt_image.py                챗지피티 웹채팅 이미지 생성 자동화
     naver_poster.py                 네이버 에디터 Playwright 자동화
+    accounts.py                     여러 계정 정보(accounts.json) 로더
   prompts/
     system_prompt.txt               지침 원문 + 자동화 어댑터
-  reports/                         (실행 시 생성) 일일 뉴스 리포트
-  output/                          (실행 시 생성) 생성된 이미지·배치 요약
+  accounts.example.json             여러 계정 운영 시 accounts.json 템플릿
+  reports/                         (실행 시 생성) 일일 뉴스 리포트 (계정별 하위 폴더)
+  output/                          (실행 시 생성) 생성된 이미지·배치 상태 (계정별 하위 폴더)
 ```
 
 ## 선택자가 깨졌을 때

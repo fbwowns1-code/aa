@@ -1,0 +1,12 @@
+{
+  "car_blog": {
+    "blog_id": "myblogid1",
+    "naver_id": "naver_login_id_1",
+    "naver_pw": "naver_login_password_1"
+  },
+  "it_blog": {
+    "blog_id": "myblogid2",
+    "naver_id": "naver_login_id_2",
+    "naver_pw": "naver_login_password_2"
+  }
+}

@@ -88,6 +88,7 @@ def post_draft(
     section_images: Optional[Dict[str, str]] = None,
     headless: bool = False,
     pause_before_save: bool = True,
+    session_file: Optional[str] = None,
 ):
     """제목·본문·이미지를 채워 넣고 네이버 블로그에 임시저장한다.
 
@@ -95,12 +96,15 @@ def post_draft(
     바로 이미지를 삽입한다.
     pause_before_save: True면 마지막 저장 전에 터미널에서 Enter를 기다린다.
     첫 실행 시에는 반드시 True로 두고 화면을 눈으로 확인하는 것을 권장한다.
+    session_file: 여러 계정을 운영할 때 계정별 로그인 세션 파일 경로.
+    생략하면 .env의 NAVER_SESSION_FILE(단일 계정용 기본 세션)을 쓴다.
     """
     section_images = section_images or {}
+    session_file = session_file or NAVER_SESSION_FILE
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
-        context = browser.new_context(storage_state=NAVER_SESSION_FILE)
+        context = browser.new_context(storage_state=session_file)
         page = context.new_page()
         page.goto(WRITE_URL_TMPL.format(blog_id=blog_id))
         page.wait_for_selector("iframe#mainFrame", timeout=30000)

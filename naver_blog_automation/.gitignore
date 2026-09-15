@@ -1,6 +1,9 @@
 .env
+accounts.json
 naver_session.json
+naver_session_*.json
 chatgpt_session.json
+chatgpt_session_*.json
 output/
 reports/
 __pycache__/

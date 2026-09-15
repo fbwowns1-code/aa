@@ -19,8 +19,13 @@ def publish_draft(
     images: Optional[List[Dict]] = None,
     headless: bool = False,
     pause_before_save: bool = True,
+    session_file: Optional[str] = None,
 ) -> None:
-    """디자인팀이 만든 이미지를 소제목별로 배치해 네이버 블로그에 임시저장한다."""
+    """디자인팀이 만든 이미지를 소제목별로 배치해 네이버 블로그에 임시저장한다.
+
+    session_file: 여러 계정을 운영할 때 그 계정의 로그인 세션 파일 경로.
+    생략하면 .env의 기본 NAVER_SESSION_FILE(단일 계정)을 쓴다.
+    """
     images = images or []
     section_images = {}
     for img in images:
@@ -35,5 +40,6 @@ def publish_draft(
         section_images=section_images,
         headless=headless,
         pause_before_save=pause_before_save,
+        session_file=session_file,
     )
     print("[발행팀] 임시저장을 완료했습니다. 최종 검토·발행은 직접 해주세요.")

@@ -50,26 +50,31 @@ def _build_prompts(turn3: dict) -> list:
     return prompts
 
 
-def produce_images(turn3: dict, out_dir: str, via_chatgpt: bool = True, headless: bool = False) -> list:
+def produce_images(turn3: dict, out_dir: str, via_chatgpt: bool = True, headless: bool = False,
+                    chatgpt_session_file: str = None) -> list:
     """확정된 이미지 시안으로 실제 이미지 파일을 만든다.
 
     via_chatgpt=True(기본)면 챗지피티 웹채팅 자동화로, False면 OpenAI
     이미지 생성 API로 만든다. 반환값: [{"subheading", "prompt", "file_path"}]
+    chatgpt_session_file: 계정별로 다른 챗지피티 세션을 쓸 경우 지정. 생략하면
+    .env의 기본 CHATGPT_SESSION_FILE(공용 세션)을 쓴다.
     """
     prompts = _build_prompts(turn3)
     if not prompts:
         print("[디자인팀] 만들 이미지가 없어서 건너뜁니다.")
         return []
 
+    session_file = chatgpt_session_file or CHATGPT_SESSION_FILE
+
     if via_chatgpt:
-        if not Path(CHATGPT_SESSION_FILE).exists():
+        if not Path(session_file).exists():
             raise RuntimeError(
-                f"디자인팀이 챗지피티에 출근하지 않았습니다(세션 파일 {CHATGPT_SESSION_FILE} 없음). "
+                f"디자인팀이 챗지피티에 출근하지 않았습니다(세션 파일 {session_file} 없음). "
                 "먼저 `python -m departments.onboarding_design`으로 출근 등록하세요."
             )
         print(f"[디자인팀] 인포그래픽 썸네일 {len(prompts)}개를 챗지피티 웹채팅으로 제작합니다.")
         return generate_infographic_images_via_chatgpt(
-            prompts, out_dir, CHATGPT_SESSION_FILE, headless=headless,
+            prompts, out_dir, session_file, headless=headless,
         )
 
     print(f"[디자인팀] 인포그래픽 썸네일 {len(prompts)}개를 이미지 생성 API로 제작합니다.")
